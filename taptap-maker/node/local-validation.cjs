@@ -6,6 +6,12 @@ const execFile = require('node:util').promisify(require('node:child_process').ex
 
 const MAX_VALIDATION_STDOUT_BYTES = 8 * 1024 * 1024;
 const MAX_INLINE_RESULT_BYTES = 64 * 1024;
+const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function attemptRunIds(validation) {
+  return Array.isArray(validation.attempt_run_ids)
+    ? validation.attempt_run_ids.filter(id => typeof id === 'string' && RUN_ID.test(id)) : [];
+}
 
 const SKILL_ROOTS = ['skills', '.installer/skills', '.agents/skills', '.codex/skills',
   '.claude/skills', '.cursor/skills', '.workbuddy/skills'];
@@ -116,6 +122,7 @@ function inlineValidation(validation) {
   return {
     ok: validation.ok, result: text(validation.result), run_id: text(validation.run_id),
     mode: text(validation.mode), error: text(validation.error),
+    attempt_run_ids: attemptRunIds(validation),
     warnings: Array.isArray(validation.warnings) ? validation.warnings.slice(0, 20).map(text) : undefined,
     report: report && typeof report === 'object' ? {
       result: text(report.result), test_result: text(report.test_result), summary,
@@ -138,11 +145,23 @@ async function assertEvidenceIgnored(root) {
   }
 }
 
-function withoutRuntimePaths(value) {
+function withoutRuntimePaths(value, root, evidence = []) {
   if (value == null) return value;
   const privateKeys = new Set(['project_realpath', 'archive_directory', 'evidence_directory',
-    'source_evidence_directory', 'log_path', 'invocation_path']);
-  return JSON.parse(JSON.stringify(value, (key, item) => privateKeys.has(key) ? undefined : item));
+    'source_evidence_directory', 'log_path', 'invocation_path', 'executable', 'supervisor_log_path']);
+  return JSON.parse(JSON.stringify(value, (key, item) => {
+    if (privateKeys.has(key)) return undefined;
+    if (key === 'artifacts' && Array.isArray(item)) {
+      return item.map(artifact => {
+        if (!artifact || typeof artifact !== 'object') return artifact;
+        const { path: absolute, ...metadata } = artifact;
+        const relative = typeof absolute === 'string' && path.isAbsolute(absolute)
+          ? path.relative(root, absolute).split(path.sep).join('/') : undefined;
+        return { ...metadata, ...(evidence.includes(relative) ? { path: relative } : {}) };
+      });
+    }
+    return item;
+  }));
 }
 
 async function runLocalValidation(args, runMaker, parseJsonOutput) {
@@ -182,7 +201,7 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
     if (!confirmedStopped) {
       return { ok: false, execution_state: 'not_executed', automatic_retry: false,
         message: status && typeof status.error === 'string' ? status.error
-          : '本地预览仍在运行或状态未确认；未停止或接管窗口，请先核对预览状态。', skill, status: withoutRuntimePaths(status) };
+          : '本地预览仍在运行或状态未确认；未停止或接管窗口，请先核对预览状态。', skill, status: withoutRuntimePaths(status, root) };
     }
     dispatched = true;
     const output = await runMaker(cliArgs, undefined, {
@@ -193,18 +212,25 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
       throw new Error('Missing final local validation result');
     }
     const evidence = [];
+    const evidenceRoot = path.join(root, '.maker', 'validation-evidence');
+    const archives = new Set();
     if (typeof validation.archive_directory === 'string') {
       const archive = path.resolve(validation.archive_directory);
-      if (inside(path.join(root, '.maker', 'validation-evidence'), archive)) {
+      if (path.dirname(archive) === evidenceRoot) archives.add(archive);
+    }
+    for (const id of attemptRunIds(validation)) archives.add(path.join(evidenceRoot, id));
+    for (const archive of archives) {
+      try {
+        if (await fs.realpath(archive) !== archive) continue;
         for (const file of ['result.json', 'validate.json', 'runtime.log', 'screenshot.png']) {
           const absolute = path.join(archive, file);
           try {
-            if ((await fs.stat(absolute)).isFile()) evidence.push(path.relative(root, absolute).split(path.sep).join('/'));
+            if ((await fs.lstat(absolute)).isFile()) evidence.push(path.relative(root, absolute).split(path.sep).join('/'));
           } catch (error) { if (error.code !== 'ENOENT') throw error; }
         }
-      }
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
-    const inline = withoutRuntimePaths(inlineValidation(validation));
+    const inline = withoutRuntimePaths(inlineValidation(validation), root, evidence);
     return { ok: true, execution_state: 'executed', automatic_retry: false,
       workflow: 'taptap-maker/local-validation.md', skill, validation: inline, evidence,
       ...(inline.summary_only ? { full_result_file: evidence.find(file => file.endsWith('/result.json')) || null } : {}),

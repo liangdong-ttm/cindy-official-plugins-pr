@@ -37,7 +37,7 @@ Pass each valued validation option as a single `--flag=value` argument. Even wit
 all options enabled, argv must fit Cindy childSpawn's 16-entry limit; otherwise
 the host discards the request and spawning times out.
 
-Current upgrade: plugin 2.1.21 / Runtime 0.0.37, with eight bundle patches
+Current upgrade: plugin 2.1.22 / Runtime 0.0.37, with eight bundle patches
 listed in the repository README and updated child-process compatibility.
 The inventory and device results below describe the historical 0.0.33/0.0.34
 baseline, not device acceptance of 0.0.37.

@@ -184,6 +184,57 @@ test('validation removes structured Runtime paths while preserving results and r
   assert.deepEqual(JSON.parse(await readFile(path.join(archive, 'result.json'), 'utf8')), original);
 });
 
+test('large screenshot reports expose every attempt without following injected ids or links', async t => {
+  const root = await fixture(t);
+  const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
+  const linked = '33333333-3333-4333-8333-333333333333';
+  const evidenceRoot = path.join(root, '.maker/validation-evidence');
+  for (const id of ids) {
+    await mkdir(path.join(evidenceRoot, id), { recursive: true });
+    for (const file of ['result.json', 'runtime.log', 'screenshot.png']) {
+      await writeFile(path.join(evidenceRoot, id, file), 'fixture');
+    }
+  }
+  const external = await fixture(t);
+  await writeFile(path.join(external, 'screenshot.png'), 'outside');
+  await symlink(external, path.join(evidenceRoot, linked), process.platform === 'win32' ? 'junction' : 'dir');
+  const original = { ok: true, result: 'COMPLETED', archive_directory: path.join(evidenceRoot, ids[1]),
+    attempt_run_ids: [...ids, linked, '../outside', '/srv/private'],
+    report: { result: 'PASS', extra: 'x'.repeat(70000) } };
+  const result = await runLocalValidation({ workdir: root, mode: 'both', screenshot_frame: 60 },
+    async args => ({ stdout: JSON.stringify(args[1] === 'status' ? stopped : original) }), parse);
+  assert.equal(result.validation.summary_only, true);
+  assert.deepEqual(result.validation.attempt_run_ids, [...ids, linked]);
+  assert.equal(result.evidence.length, 6);
+  for (const id of ids) assert.ok(result.evidence.includes('.maker/validation-evidence/' + id + '/screenshot.png'));
+  assert.ok(!result.evidence.some(file => file.includes(linked) || file.includes('outside')));
+  assert.equal(result.full_result_file, '.maker/validation-evidence/' + ids[1] + '/result.json');
+});
+
+test('artifact paths reference verified evidence and blocked status removes private executable paths', async t => {
+  const root = await fixture(t);
+  const archive = path.join(root, '.maker/validation-evidence/test-run');
+  await mkdir(archive, { recursive: true });
+  await writeFile(path.join(archive, 'validate.json'), '{}');
+  const original = { ok: true, result: 'COMPLETED', archive_directory: archive, artifacts: [
+    { kind: 'validate-report', path: path.join(archive, 'validate.json') },
+    { kind: 'other', path: '/srv/private/file' },
+  ] };
+  const result = await runLocalValidation({ workdir: root }, async args => ({
+    stdout: JSON.stringify(args[1] === 'status' ? stopped : original),
+  }), parse);
+  assert.deepEqual(result.validation.artifacts, [
+    { kind: 'validate-report', path: '.maker/validation-evidence/test-run/validate.json' }, { kind: 'other' },
+  ]);
+  const blocked = await runLocalValidation({ workdir: root }, async () => ({ stdout: JSON.stringify({
+    ...stopped, process_alive: true, state: 'running', executable: '/mnt/private/Runtime',
+    supervisor_log_path: '/srv/private/supervisor.log', artifacts: [{ path: '/srv/private/file' }],
+  }) }), parse);
+  assert.equal(blocked.execution_state, 'not_executed');
+  assert.ok(!JSON.stringify(blocked).includes('/mnt/'));
+  assert.ok(!JSON.stringify(blocked).includes('/srv/'));
+});
+
 test('evidence path links and outside-project Skill links are rejected without following writes', async t => {
   const root = await fixture(t);
   const external = await fixture(t);
