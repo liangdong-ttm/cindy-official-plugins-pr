@@ -107,9 +107,31 @@ test('missing Skill does not block validation; FAIL and partial evidence survive
     assert.equal(result.skill.required_for_plugin_validation, false);
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[1].slice(0, 2), ['preview', 'validate']);
-    assert.equal(calls[1][calls[1].indexOf('--output-dir') + 1], path.join(root, '.maker/validation-evidence'));
+    assert.ok(calls[1].includes('--output-dir=' + path.join(root, '.maker/validation-evidence')));
     assert.ok(!calls.flat().some(arg => ['build', 'init', 'stop', 'install', '--env'].includes(arg)));
   }
+});
+
+test('all validation options fit the host childSpawn limit and preserve literal values', async t => {
+  const parent = await fixture(t);
+  const root = path.join(parent, 'project with spaces=literal');
+  await mkdir(root);
+  await writeFile(path.join(root, '.gitignore'), '.maker/validation-evidence/\n');
+  const calls = [];
+  const result = await runLocalValidation({ workdir: root, mode: 'both',
+    entry: 'my scripts/main=entry.lua', test: 'my tests/check=state.lua',
+    screenshot_frame: 60, frames: 90, timeout_seconds: 45,
+    width: 960, height: 540, nosound: true }, async args => {
+    assert.ok(args.length <= 16, 'host discards childSpawn requests with more than 16 args');
+    calls.push(args);
+    return { stdout: JSON.stringify(args[1] === 'status' ? stopped : { ok: true, result: 'COMPLETED' }) };
+  }, parse);
+  assert.equal(result.execution_state, 'executed');
+  assert.deepEqual(calls[1], ['preview', 'validate', '--target-dir=' + root, '--mode=both',
+    '--json', '--screenshot-frame=60', '--validate-frames=90', '--validate-timeout=45',
+    '--width=960', '--height=540', '--entry=my scripts/main=entry.lua',
+    '--validate-test=my tests/check=state.lua', '--nosound',
+    '--output-dir=' + path.join(root, '.maker/validation-evidence')]);
 });
 
 test('missing final output is unknown and is not retried', async t => {

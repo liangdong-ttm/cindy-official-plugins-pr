@@ -33,8 +33,11 @@ unverified previews, fixed CLI arguments, CLI disposal only after final JSON, fa
 reports and partial evidence on nonzero exit, and COMPLETED versus game PASS. Evidence
 is confined to project `.maker/validation-evidence/` and directory links are rejected.
 Do not automatically install Runtime, update the dev kit or replace project files.
+Pass each valued validation option as a single `--flag=value` argument. Even with
+all options enabled, argv must fit Cindy childSpawn's 16-entry limit; otherwise
+the host discards the request and spawning times out.
 
-Current upgrade: plugin 2.1.20 / Runtime 0.0.37, with eight bundle patches
+Current upgrade: plugin 2.1.21 / Runtime 0.0.37, with eight bundle patches
 listed in the repository README and updated child-process compatibility.
 The inventory and device results below describe the historical 0.0.33/0.0.34
 baseline, not device acceptance of 0.0.37.

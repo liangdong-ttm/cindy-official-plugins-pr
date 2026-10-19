@@ -77,13 +77,14 @@ function validationArgs(args, root) {
   if (mode !== 'validate' && args.screenshot_frame === undefined) {
     throw new Error('screenshot_frame is required for screenshot or both mode');
   }
-  const result = ['preview', 'validate', '--target-dir', root, '--mode', mode, '--json'];
+  // Cindy childSpawn accepts at most 16 argv entries; keep each valued option in one entry.
+  const result = ['preview', 'validate', '--target-dir=' + root, '--mode=' + mode, '--json'];
   for (const [key, [flag, min, max]] of Object.entries(NUMERIC_OPTIONS)) {
     if (args[key] === undefined) continue;
     if (!Number.isSafeInteger(args[key]) || args[key] < min || args[key] > max) {
       throw new Error(key + ' must be an integer from ' + min + ' to ' + max);
     }
-    result.push(flag, String(args[key]));
+    result.push(flag + '=' + String(args[key]));
   }
   for (const [key, flag] of [['entry', '--entry'], ['test', '--validate-test']]) {
     if (args[key] === undefined) continue;
@@ -91,7 +92,7 @@ function validationArgs(args, root) {
       || args[key].includes(String.fromCharCode(0)) || /[\\:]/.test(args[key])
       || args[key].split('/').some(part => !part || part === '.' || part === '..')
       || path.isAbsolute(args[key])) throw new Error('Invalid project-relative ' + key);
-    result.push(flag, args[key]);
+    result.push(flag + '=' + args[key]);
   }
   if (args.nosound !== undefined && typeof args.nosound !== 'boolean') {
     throw new Error('nosound must be a boolean');
@@ -165,7 +166,7 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
       }
     }
     await assertEvidenceIgnored(root);
-    cliArgs.push('--output-dir', directory);
+    cliArgs.push('--output-dir=' + directory);
   } catch (error) {
     return { ok: false, execution_state: 'not_executed', automatic_retry: false,
       message: error.message };
