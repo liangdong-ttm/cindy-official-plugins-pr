@@ -3,7 +3,7 @@ import childProcess from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,7 @@ import { createContext, Script } from 'node:vm';
 
 import adapter from '../taptap-maker/node/child-process-adapter.cjs';
 import rootRouterModule from '../taptap-maker/node/mcp-root-router.cjs';
+import validationModule from '../taptap-maker/node/local-validation.cjs';
 
 const pluginRoot = new URL('../taptap-maker/', import.meta.url);
 const mainSource = readFileSync(new URL('main.js', pluginRoot), 'utf8');
@@ -476,13 +477,14 @@ function fakeChildHandle() {
   };
 }
 
-function loadAccountInternals() {
+function loadAccountInternals(nodeApi) {
   const readline = {
     createInterface() {
       return { on() {} };
     },
   };
   const context = createContext({
+    __CINDY_NODE__: nodeApi,
     Buffer,
     clearInterval,
     clearTimeout,
@@ -496,16 +498,62 @@ function loadAccountInternals() {
     setTimeout,
   });
   new Script(
-    `${accountSource}\nglobalThis.__accountInternals = { ensureTargetAvailable, projectDirectoryName, projectSyncFailure };`,
+    `${accountSource}\nglobalThis.__accountInternals = { ensureTargetAvailable, projectDirectoryName, projectSyncFailure, runMaker, parseJsonOutput };`,
     { filename: 'taptap-maker/node/account.cjs' },
   ).runInContext(context);
   return context.__accountInternals;
 }
 
+test('large validation reports retain archive evidence without exceeding the Host RPC line limit', async t => {
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cindy-validation-report-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const archive = path.join(root, '.maker/validation-evidence/test-run');
+  await mkdir(archive, { recursive: true });
+  const report = { result: 'FAIL', test_result: 'FAILED', frames_completed: 60,
+    summary: { lua_errors: 1, resource_errors: 0, engine_errors: 0, total_errors: 1 },
+    errors: ['x'.repeat(3 * 1024 * 1024)] };
+  const original = { ok: true, result: 'COMPLETED', report, archive_directory: archive };
+  await writeFile(path.join(archive, 'result.json'), JSON.stringify(original));
+  await writeFile(path.join(archive, 'validate.json'), JSON.stringify(report));
+  const { runMaker, parseJsonOutput } = loadAccountInternals({
+    async spawnEntry(entry, args) {
+      assert.equal(entry, 'node/maker-child.cjs');
+      const child = fakeChildHandle();
+      setImmediate(() => child.stdout.write(JSON.stringify(args[1] === 'status'
+        ? { protocol_version: 1, ok: true, state: 'stopped', process_alive: false } : original)));
+      return child;
+    },
+  });
+  const result = await validationModule.runLocalValidation({ workdir: root }, runMaker, parseJsonOutput);
+  assert.equal(result.execution_state, 'executed');
+  assert.equal(result.validation.result, 'COMPLETED');
+  assert.equal(result.validation.report.result, 'FAIL');
+  assert.equal(result.validation.report.test_result, 'FAILED');
+  assert.deepEqual(result.validation.report.summary, report.summary);
+  assert.equal(result.validation.summary_only, true);
+  assert.equal(result.full_result_file, '.maker/validation-evidence/test-run/result.json');
+  assert.deepEqual(JSON.parse(readFileSync(path.join(root, result.full_result_file), 'utf8')), original);
+  const rpc = { jsonrpc: '2.0', id: 1, result: {
+    content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result,
+  } };
+  assert.ok(Buffer.byteLength(JSON.stringify(rpc)) < 1024 * 1024);
+});
+
+test('account commands retain their existing output limit', async () => {
+  const { runMaker } = loadAccountInternals({
+    async spawnEntry() {
+      const child = fakeChildHandle();
+      setImmediate(() => child.stdout.write('x'.repeat(2 * 1024 * 1024 + 1)));
+      return child;
+    },
+  });
+  await assert.rejects(runMaker(['apps', '--json']), /stdout 输出超限/);
+});
+
 test('manifest、手动安装策略和官方 Runtime 版本保持一致', () => {
   assert.equal(manifest.id, 'taptap-maker');
   assert.equal(manifest.author, 'Cindy');
-  assert.equal(manifest.version, '2.1.17');
+  assert.equal(manifest.version, '2.1.18');
   assert.equal(manifest.minCindyVersion, '0.1.64');
   assert.match(
     manifest.tools.find((tool) => tool.name === 'maker_build').description,

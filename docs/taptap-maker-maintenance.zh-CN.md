@@ -4,6 +4,13 @@
 
 ## 先读结论
 
+### 2.1.18：大验证报告交付
+
+仅本地验证的 CLI stdout 容量扩大为 8 MiB，以接收 Runtime 允许的 4 MiB 报告及包装；
+账号命令与 stderr 仍维持 2 MiB 上限。超过 64 KiB 的结果返回明确标记的摘要与原始归档路径，
+不把多 MiB 报告复制进 MCP 的 text 和 structuredContent。完整报告仍须从证据文件读取。
+保留 14 分钟 CLI 总时限和宿主 15 分钟上限；单轮预算不承诺所有自动重试都能跑完。
+
 ### 2.1.17：Cindy 本地验证入口
 
 `maker_validate` 通过现有固定 Node 入口调用同包 `preview status`、`preview validate`，

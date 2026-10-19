@@ -137,6 +137,7 @@ function projectSyncFailure(error) {
 }
 
 function runMaker(args, input, options = {}) {
+  const maxStdoutBytes = options.maxStdoutBytes ?? MAX_OUTPUT_BYTES;
   return new Promise(function run(resolve, reject) {
     const childApi = globalThis.__CINDY_NODE__;
     if (!childApi || typeof childApi.spawnEntry !== 'function') {
@@ -165,7 +166,7 @@ function runMaker(args, input, options = {}) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       if (stream === 'stdout') stdoutBytes += buffer.length;
       else stderrBytes += buffer.length;
-      if (stdoutBytes > MAX_OUTPUT_BYTES || stderrBytes > MAX_OUTPUT_BYTES) {
+      if (stdoutBytes > maxStdoutBytes || stderrBytes > MAX_OUTPUT_BYTES) {
         child.kill();
         finish(new Error(`TapTap Maker ${stream} 输出超限`));
         return;

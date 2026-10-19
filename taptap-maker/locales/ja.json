@@ -87,7 +87,7 @@
       "description": "Maker コンソールを開く. ローカルサービスを起動します。ビルド、提出、ゲームランタイムのインストールは行いません。ページを閉じても停止しません。サービスはコンソールで停止してください。メディア設定は Agent ツールのみ対象で、手動操作には適用されません。"
     },
     "maker_validate": {
-      "description": "同梱 Runtime で現在のワークスペースの Lua 検証・スクリーンショットを実行します。プロジェクト Skill、コミット、リモートビルドは不要です。単独プレイ専用。稼働中または状態不明のプレビューを拒否し、自動停止・Runtime インストール・開発キット更新は行いません。先に taptap-maker/local-validation.md を読み、COMPLETED を PASS とせずレポートと画像を確認してください。",
+      "description": "同梱 Runtime で現在のワークスペースの Lua 検証・スクリーンショットを実行します。プロジェクト Skill、コミット、リモートビルドは不要です。単独プレイ専用。稼働中または状態不明のプレビューを拒否し、自動停止・Runtime インストール・開発キット更新は行いません。先に taptap-maker/local-validation.md を読み、COMPLETED を PASS とせずレポートと画像を確認してください。 大きな結果は要約を返します。完全な結果は証拠ファイルのパスから確認してください。",
       "parameters": {
         "/properties/mode": {
           "description": "Validation mode; defaults to validate. Screenshot modes require screenshot_frame."
@@ -105,7 +105,7 @@
           "description": "Optional validation frame count; keep at least three readback frames after capture."
         },
         "/properties/timeout_seconds": {
-          "description": "Optional validation budget in seconds; explicit budgets are not automatically increased."
+          "description": "検証1回あたりのタイムアウト秒数。明示した予算は増やしません。プラグイン呼び出し全体の上限は14分です。"
         },
         "/properties/width": {
           "description": "Width for this run only; does not change publish settings."

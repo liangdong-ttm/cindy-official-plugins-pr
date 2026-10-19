@@ -3,6 +3,9 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
+const MAX_VALIDATION_STDOUT_BYTES = 8 * 1024 * 1024;
+const MAX_INLINE_RESULT_BYTES = 64 * 1024;
+
 const SKILL_ROOTS = ['skills', '.installer/skills', '.agents/skills', '.codex/skills',
   '.claude/skills', '.cursor/skills', '.workbuddy/skills'];
 const NUMERIC_OPTIONS = {
@@ -93,6 +96,27 @@ function validationArgs(args, root) {
   return result;
 }
 
+function inlineValidation(validation) {
+  if (Buffer.byteLength(JSON.stringify(validation)) <= MAX_INLINE_RESULT_BYTES) return validation;
+  const report = validation.report;
+  const summary = {};
+  for (const key of ['lua_errors', 'resource_errors', 'engine_errors', 'total_errors']) {
+    if (Number.isSafeInteger(report?.summary?.[key])) summary[key] = report.summary[key];
+  }
+  const text = value => typeof value === 'string' ? value.slice(0, 4000) : undefined;
+  // The full result stays in Runtime's archive; keep the duplicated MCP response bounded.
+  return {
+    ok: validation.ok, result: text(validation.result), run_id: text(validation.run_id),
+    mode: text(validation.mode), error: text(validation.error),
+    warnings: Array.isArray(validation.warnings) ? validation.warnings.slice(0, 20).map(text) : undefined,
+    report: report && typeof report === 'object' ? {
+      result: text(report.result), test_result: text(report.test_result), summary,
+      frames_completed: Number.isSafeInteger(report.frames_completed) ? report.frames_completed : undefined,
+    } : undefined,
+    summary_only: true,
+  };
+}
+
 async function runLocalValidation(args, runMaker, parseJsonOutput) {
   let root;
   let cliArgs;
@@ -132,7 +156,9 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
           : '本地预览仍在运行或状态未确认；未停止或接管窗口，请先核对预览状态。', skill, status };
     }
     dispatched = true;
-    const output = await runMaker(cliArgs, undefined, { preserveExitResult: true });
+    const output = await runMaker(cliArgs, undefined, {
+      preserveExitResult: true, maxStdoutBytes: MAX_VALIDATION_STDOUT_BYTES,
+    });
     const validation = parseJsonOutput(output);
     if (!validation || Array.isArray(validation) || typeof validation.ok !== 'boolean') {
       throw new Error('Missing final local validation result');
@@ -149,8 +175,10 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
         }
       }
     }
+    const inline = inlineValidation(validation);
     return { ok: true, execution_state: 'executed', automatic_retry: false,
-      workflow: 'taptap-maker/local-validation.md', skill, validation, evidence,
+      workflow: 'taptap-maker/local-validation.md', skill, validation: inline, evidence,
+      ...(inline.summary_only ? { full_result_file: evidence.find(file => file.endsWith('/result.json')) || null } : {}),
       message: '已收集本地验证结果。项目 Skill 不影响插件内置验证；COMPLETED 不等于 PASS，请检查原始报告并查看每张截图。' };
   } catch (error) {
     return { ok: false, execution_state: dispatched ? 'unknown' : 'not_executed',

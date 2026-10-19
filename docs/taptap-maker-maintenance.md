@@ -4,6 +4,15 @@
 
 ## Read first
 
+### 2.1.18: Large validation reports
+
+Only local validation raises the CLI stdout limit to 8 MiB to receive Runtime's
+4 MiB reports plus their wrapper; account commands and stderr retain 2 MiB limits.
+Results above 64 KiB return an explicitly marked summary and original archive paths,
+without duplicating multi-MiB reports into MCP text and structuredContent. Read the
+evidence files for the full report. The 14-minute CLI and 15-minute Host limits remain;
+a per-attempt budget does not guarantee that all automatic retries can finish.
+
 ### 2.1.17: Cindy local validation entry
 
 `maker_validate` calls bundled `preview status` and `preview validate` through the
