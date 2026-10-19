@@ -1,0 +1,180 @@
+{
+  "package": "@taptap/maker",
+  "version": "0.0.37",
+  "integrity": "sha512-vZCE6q288NmLzx51kiOsrpQLYlt42fmGM6F8j8k1xlN4r8U/vytzdVx3jPLzzK5lPNrqmF79ryPyE9pPYQLCaw==",
+  "originalSha256": "bf57493f8bf70d8943ae23d3ea01ef3383ae4f2e0aedb48ef01f00084e75d8dc",
+  "patchedSha256": "c27e3d3e51a77de817848c4b5e5c3c2b0c8cf30d0516f552056dc7db6b1100c7",
+  "patches": [
+    {
+      "id": "V1-executed-state",
+      "edits": [
+        {
+          "before": "return value === \"not_executed\" || value === \"unknown\" ? value : void 0;",
+          "after": "return value === \"not_executed\" || value === \"executed\" || value === \"unknown\" ? value : void 0;",
+          "count": 1
+        },
+        {
+          "before": "  if (states.includes(\"unknown\")) return \"unknown\";\n  return states.includes(\"not_executed\") ? \"not_executed\" : result.isError ? \"unknown\" : void 0;",
+          "after": "  if (states.includes(\"unknown\") || states.includes(\"executed\") && states.includes(\"not_executed\")) return \"unknown\";\n  if (states.includes(\"executed\")) return \"executed\";\n  return states.includes(\"not_executed\") ? \"not_executed\" : result.isError ? \"unknown\" : void 0;",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "V2-blocked-call-state",
+      "edits": [
+        {
+          "before": "        content: [{ type: \"text\", text: accessState.message }]\n      };",
+          "after": "        content: [{ type: \"text\", text: accessState.message }],\n        structuredContent: {\n          success: false,\n          message: accessState.message,\n          execution_state: \"not_executed\"\n        }\n      };",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "V3-access-cache",
+      "edits": [
+        {
+          "before": "  const accessStatePromise = resolveMakerMcpAccessState(getMakerEnvironment());\n",
+          "after": "",
+          "count": 1
+        },
+        {
+          "before": "const accessState = await accessStatePromise;",
+          "after": "const accessState = await resolveMakerMcpAccessState(getMakerEnvironment());",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "id": "V4-blocked-list-reason",
+      "edits": [
+        {
+          "before": "      return { tools: [tools[0]] };",
+          "after": "      return {\n        tools: [tools[0]],\n        _meta: { maker_access: { code: \"BLACKLISTED\", message: accessState.message } }\n      };",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "V5-skill-root-safety",
+      "edits": [
+        {
+          "before": "  const sourceDir = path75.join(project.projectRoot, \".installer\", \"skills\");",
+          "after": "  const sourceDir = path75.join(project.projectRoot, \".installer\", \"skills\");\n  assertSafeUserSkillRoots(project.projectRoot);",
+          "count": 1
+        },
+        {
+          "before": "function installUserSkills(projectRoot, stagingDir, skillNames) {",
+          "after": "function assertSafeUserSkillRoots(projectRoot) {\n  for (const relative of [\".installer/skills\", \".codex/skills\", \".cursor/skills\", \".workbuddy/skills\"]) {\n    let current = projectRoot;\n    for (const segment of relative.split(\"/\")) {\n      current = path75.join(current, segment);\n      if (pathExists2(current) && fs79.lstatSync(current).isSymbolicLink()) {\n        throw new Error(\"Maker user Skill 安装目标包含符号链接，为安全起见已停止。\");\n      }\n    }\n  }\n}\nfunction installUserSkills(projectRoot, stagingDir, skillNames) {",
+          "count": 1
+        },
+        {
+          "before": "function installUserSkills(projectRoot, stagingDir, skillNames) {\n  if (skillNames.length === 0) {\n    return;\n  }",
+          "after": "function installUserSkills(projectRoot, stagingDir, skillNames) {\n  if (skillNames.length === 0) {\n    return;\n  }\n  assertSafeUserSkillRoots(projectRoot);",
+          "count": 1
+        },
+        {
+          "before": "function installUserSkillsForClients(projectRoot, skillNames) {\n  if (skillNames.length === 0) {\n    return;\n  }",
+          "after": "function installUserSkillsForClients(projectRoot, skillNames) {\n  if (skillNames.length === 0) {\n    return;\n  }\n  assertSafeUserSkillRoots(projectRoot);",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "V6-auth-retry-execution-state",
+      "edits": [
+        {
+          "before": "    if (options3.retryExpiredAuth === false || !isMakerMacExpiredFailure(error2)) {",
+          "after": "    if (options3.retryExpiredAuth === false || !(error2 instanceof RemoteProxyToolCallError) || error2.executionState !== \"not_executed\" || !isMakerMacExpiredFailure(error2)) {",
+          "count": 1
+        },
+        {
+          "before": "  if (result && (options3.retryExpiredAuth === false || !isMakerMacExpiredFailure(result)))",
+          "after": "  if (result && (options3.retryExpiredAuth === false || getRemoteProxyExecutionState(result) !== \"not_executed\" || !isMakerMacExpiredFailure(result)))",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "V7-console-launcher-isolation",
+      "edits": [
+        {
+          "before": "      version: version2,\n      ...version2 === \"dev\" ? { developmentSource } : {}",
+          "after": "      version: version2,\n      ...process.env.TAPTAP_MAKER_DISTRIBUTION === \"cindy_plugin\" ? { distribution: \"cindy_plugin\", entry: developmentSource?.entry } : {},\n      ...version2 === \"dev\" ? { developmentSource } : {}",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "V8-cindy-console-server-vision",
+      "edits": [
+        {
+          "before": "    <button id=\"settings-button\" class=\"icon-button\" aria-label=\"设置\" title=\"设置\"></button>",
+          "after": "    ${process.env.TAPTAP_MAKER_DISTRIBUTION === \"cindy_plugin\" ? \"\" : '<button id=\"settings-button\" class=\"icon-button\" aria-label=\"设置\" title=\"设置\"></button>'}",
+          "count": 1
+        },
+        {
+          "before": "  $('settings-button').append(icon('settings'));",
+          "after": "  $('settings-button')?.append(icon('settings'));",
+          "count": 1
+        },
+        {
+          "before": "  $('settings-button').addEventListener('click',() => navigate('settings'));",
+          "after": "  $('settings-button')?.addEventListener('click',() => navigate('settings'));",
+          "count": 1
+        },
+        {
+          "before": "function readModelSettings() {",
+          "after": "function readModelSettings() {\n  if (process.env.TAPTAP_MAKER_DISTRIBUTION === \"cindy_plugin\") return emptyModelSettings();",
+          "count": 1
+        },
+        {
+          "before": "function configuredUiVisionModels() {",
+          "after": "function configuredUiVisionModels() {\n  if (process.env.TAPTAP_MAKER_DISTRIBUTION === \"cindy_plugin\") return [{ id: UI_VISION_MODEL, model: UI_VISION_MODEL, endpoint: \"\", source: \"server\" }];",
+          "count": 1
+        },
+        {
+          "before": "  const models = configuredUiVisionModels();\n  if (((_a3 = models[0]) == null ? void 0 : _a3.source) !== \"server\" || await serverRecognitionAvailable(root2, fetcher))",
+          "after": "  const models = configuredUiVisionModels();\n  if (process.env.TAPTAP_MAKER_DISTRIBUTION === \"cindy_plugin\") {\n    if (!await serverRecognitionAvailable(root2, fetcher)) throw new ConsoleError(\"Maker Server 识图暂不可用，请检查项目绑定、账号权限和网络后重试。\", 503);\n    return models;\n  }\n  if (((_a3 = models[0]) == null ? void 0 : _a3.source) !== \"server\" || await serverRecognitionAvailable(root2, fetcher))",
+          "count": 1
+        },
+        {
+          "before": "      source: source === \"server\" && !available ? \"chatgpt-web\" : source,",
+          "after": "      source: process.env.TAPTAP_MAKER_DISTRIBUTION !== \"cindy_plugin\" && source === \"server\" && !available ? \"chatgpt-web\" : source,",
+          "count": 1
+        },
+        {
+          "before": "      if (url2.pathname === \"/api/settings/models\") {",
+          "after": "      if (process.env.TAPTAP_MAKER_DISTRIBUTION === \"cindy_plugin\" && request2.method !== \"GET\" && [\"/api/settings/models\", \"/api/settings/ui-vision\"].includes(url2.pathname)) throw new ConsoleError(\"Cindy 插件不支持自定义模型 API 配置。\", 403);\n      if (url2.pathname === \"/api/settings/models\") {",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "vendorHashes": {
+    "README.md": "fae512402f7fb6c5e5d373d1ad40104acfd6f118ac55cd108dbf6d2d172cc536",
+    "bin/taptap-maker": "d3cd496fb6cdf9606a809570de2920b7e40101939bc1cb6841f4ae7cda97c718",
+    "dist/maker.js": "c27e3d3e51a77de817848c4b5e5c3c2b0c8cf30d0516f552056dc7db6b1100c7",
+    "docs/MAKER_CONSOLE.md": "411e20d03fbfb3583b475de2087cc20ae48e45ada5d78ab89077fa36f0363331",
+    "docs/MAKER_LOCAL_PREVIEW.md": "f9023da4151f357227102a3a0e04e5b34fc93f69146f6e69f15b23134c871c75",
+    "docs/MAKER_MCP_CONNECTION_TROUBLESHOOTING.md": "5cf23d036755d4f458644eb32f2bff6656a8f4cd3bada4e7deaa0c2c2c695338",
+    "package.json": "730ae044703d90007029d7c0bc31c8ff74f76e9189790f83c42f9079ec71c18f",
+    "skills/lua-ui-to-json/LICENSE": "793c7538e23d673d0fdfa5244c2d55e66b38e907f869f503ae4bbed079cd795b",
+    "skills/lua-ui-to-json/SKILL.md": "e58ecb553771b51e9ffa09656215949ef14a19a4c7be16a5aa2ac1cc3713ab18",
+    "skills/lua-ui-to-json/references/conversion.md": "477c73a613f81c75745ff3aba2f8056f303efeeb8cb459913e45a938028936da",
+    "skills/lua-ui-to-json/references/diagnostics.md": "f5a4f0221ee2bf85fc06060fda7b1028b598bb3bc531e2a0e8b8029ac7338caa",
+    "skills/lua-ui-to-json/references/nanovg.md": "ba581a29e3cc96b8338bf19c37f80318c8ad2e2e1fe3ab4c005fa562d77c49e7",
+    "skills/lua-ui-to-json/runtime/MakerNanoVG.lua": "51eedf6a8e8fed3d0c8c5140a2e931b593440ef34924b94d2bf6cd7451e7d3f7",
+    "skills/lua-ui-to-json/scripts/check-ui.cjs": "f56799f330db06bc9e61787af03c182c2466a3ea99ea90f7e85dfeb793f76c24",
+    "skills/lua-ui-to-json/scripts/ui-json-check.cjs": "d45ea89e8237d0127770fb2391f39f322c11ff75f9024e49f0a541704c32dc06",
+    "skills/maker-ui-bbox-workflow/SKILL.md": "e205255d684590146328c74100d0ad8f9560543176f91a90624bb39cd6803b75",
+    "skills/maker-ui-workflow/SKILL.md": "8612c30a44d75d812ea444d939e9178e02ab6de1a1789c4b62ae19a10ae14fe2",
+    "skills/maker-ui-workflow/references/chatgpt-web.md": "3a26f6b04a4d36504dc0804e3a621a8e44ac04b318a7c84d003ef56c9e4bd6d1",
+    "skills/maker-ui-workflow/references/workflow.md": "62e772b8a218bba2cc69b4ac95c87a2dc4993801f473122db2f1e8a17c7f8f69",
+    "skills/maker-ui-workflow/scripts/assemble-ui.mjs": "a31616aebc8eda57940dfc0129b97bb08db50d8daaec5f4c92af7af7b1b52af4",
+    "skills/taptap-maker-dev-kit-guide/SKILL.md": "2dd74a9182ed64af3012b2c5f349002d887bbeecc8c49eebb6c7da604d54cc46",
+    "skills/taptap-maker-local/SKILL.md": "a3e1a88b4a5abbe489fd6afaa2787ea22e0cfee2acbed494a0ea4cd1bf864586",
+    "skills/update-taptap-mcp/SKILL.md": "8afaa0dd6780bf26fbd9505f8340eead1317e968aa3dd4a47d2bfcf267cddc5e",
+    "LICENSE": "3a6ed4d91c318ec454c98c8290bc02706d2f87fd922ef9944c1604cd0b718738"
+  }
+}

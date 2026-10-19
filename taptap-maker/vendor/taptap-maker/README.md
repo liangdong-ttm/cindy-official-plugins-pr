@@ -2,6 +2,10 @@
 
 TapTap Maker local development CLI and MCP server.
 
+The console includes a project UI editor with reference-image comparison. Official template media
+download on demand from CDN, fall back to GitHub, and are verified and cached locally. First use
+of an uncached template requires a network connection; media are not in this package.
+
 ## Usage
 
 ```bash
@@ -19,7 +23,7 @@ taptap-maker install
 taptap-maker mcp verify
 taptap-maker mcp install --launcher npx
 taptap-maker mcp verify --mode npx
-npx -y --package @taptap/maker@0.0.34 taptap-maker mcp report --ide <client> --target-dir <project> --context-stdin --consent --json
+npx -y --package @taptap/maker@0.0.37 taptap-maker mcp report --ide <client> --target-dir <project> --context-stdin --consent --json
 taptap-maker agents update
 taptap-maker upgrade
 taptap-maker dev-kit update
@@ -52,10 +56,10 @@ It does not include the legacy TapTap Open API MCP server, proxy, native signer,
 or OpenClaw plugin package contents.
 
 For likely Maker MCP/proxy infrastructure failures, the bundled workflow asks for user consent once
-before running `npx -y --package @taptap/maker@0.0.34 taptap-maker mcp report`. The command submits a sanitized GitHub Issue only with
+before running `npx -y --package @taptap/maker@0.0.37 taptap-maker mcp report`. The command submits a sanitized GitHub Issue only with
 `--consent`; unavailable GitHub CLI, auth, or network returns `manual_required` with a copyable
 report and never blocks the original Maker task.
 
 Full connection and tool-call troubleshooting guide: `docs/MAKER_MCP_CONNECTION_TROUBLESHOOTING.md`.
 
-Version: 0.0.34
+Version: 0.0.37

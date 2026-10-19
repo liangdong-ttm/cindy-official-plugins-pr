@@ -4,8 +4,27 @@
 
 ## Read first
 
+### 2.1.17: Cindy local validation entry
+
+`maker_validate` calls bundled `preview status` and `preview validate` through the
+existing fixed Node entry. It does not modify vendor, standalone MCP or project Skills.
+Cindy's Manual supplies the workflow; source files, installed copies and conflicting
+links are reported separately. The official 0.0.37 source-directory check is identical
+to the bundled one and must not be classified as a Cindy-only defect.
+
+Preserve trusted-workspace overriding, readonly enforcement, no takeover of active or
+unverified previews, fixed CLI arguments, CLI disposal only after final JSON, failed
+reports and partial evidence on nonzero exit, and COMPLETED versus game PASS. Evidence
+is confined to project `.maker/validation-evidence/` and directory links are rejected.
+Do not automatically install Runtime, update the dev kit or replace project files.
+
+Current upgrade: plugin 2.1.16 / Runtime 0.0.37, with eight bundle patches
+listed in the repository README and updated child-process compatibility.
+The inventory and device results below describe the historical 0.0.33/0.0.34
+baseline, not device acceptance of 0.0.37.
+
 - Do not remove Cindy safeguards merely to obtain an unmodified upstream bundle.
-- The current vendor has **five** patches, not only executed.
+- The historical 0.0.34 vendor has **five** patches, not only executed; 0.0.37 has eight.
 - **Logging is not globally disabled.** Cindy relinquished remote-watcher ownership and idle cleanup; system Node runs the watcher and Maker owns its lifetime.
 - Maker CLI already validates and persists PAT. Cindy adds status detection, masking, UI and process compatibility; those are not all redundant implementations.
 - New versions or matching keywords do not prove equivalent fixes. Inspect released artifacts and behavior.

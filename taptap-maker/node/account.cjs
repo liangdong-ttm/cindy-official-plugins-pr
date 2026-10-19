@@ -136,7 +136,7 @@ function projectSyncFailure(error) {
   };
 }
 
-function runMaker(args, input) {
+function runMaker(args, input, options = {}) {
   return new Promise(function run(resolve, reject) {
     const childApi = globalThis.__CINDY_NODE__;
     if (!childApi || typeof childApi.spawnEntry !== 'function') {
@@ -191,7 +191,7 @@ function runMaker(args, input) {
     child.once('close', function onClose(code) {
       const stdoutText = Buffer.concat(stdout).toString('utf8');
       const stderrText = Buffer.concat(stderr).toString('utf8');
-      if (code !== 0) {
+      if (code !== 0 && !options.preserveExitResult) {
         finish(new Error(makerErrorText(stdoutText, stderrText)));
         return;
       }
@@ -433,6 +433,9 @@ function openPatPage() {
 
 async function executeAction(args) {
   const action = args.action;
+  if (action === 'local_validate') {
+    return require('./local-validation.cjs').runLocalValidation(args, runMaker, parseJsonOutput);
+  }
   if (action === 'console_open') return require('./console.cjs').openConsole(args.workdir);
   if (action === 'status') {
     if (!(await credentialExists())) return { ok: true, state: 'disconnected' };

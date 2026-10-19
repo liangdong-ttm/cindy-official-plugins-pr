@@ -4,7 +4,7 @@
   "name": "TapTap Maker",
   "description": "使用插件随附的官方 TapTap Maker Runtime 连接账号、同步或初始化项目、构建游戏并打开官方预览；无需自行安装 CLI 或配置 MCP。",
   "whenToUse": "仅用于明确的 TapTap Maker 游戏项目操作：账号连接、项目初始化/检查、构建/运行/预览，或 Maker 专属素材、广告与调试。仅提到 TapTap、非 Maker 的平台/SDK/上架任务或本插件源码维护时不适用。",
-  "version": "2.1.15",
+  "version": "2.1.17",
   "minCindyVersion": "0.1.64",
   "locales": {
     "en": "locales/en.json",
@@ -102,6 +102,67 @@
     {
       "name": "maker_doctor",
       "description": "诊断当前会话工作目录的 TapTap Maker 本地开发环境与项目配置。"
+    },
+    {
+      "name": "maker_validate",
+      "description": "使用插件随包 Runtime 对当前工作区做本地 Lua 验证或截图；不依赖项目 Skill 安装，不提交或远端构建。仅单机，有活动预览或状态未确认时拒绝，不自动停止、安装 Runtime 或更新开发工具包。先读 taptap-maker/local-validation.md；COMPLETED 不等于 PASS，必须检查原报告并查看截图。",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "validate",
+              "screenshot",
+              "both"
+            ],
+            "description": "验证模式；默认 validate。截图模式必须选择 screenshot_frame。"
+          },
+          "entry": {
+            "type": "string",
+            "description": "可选，项目脚本目录下已有的 Lua 入口相对路径。"
+          },
+          "test": {
+            "type": "string",
+            "description": "可选，项目脚本目录下已有的 V 断言脚本相对路径。"
+          },
+          "screenshot_frame": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "按本次加载状态选择截图帧；无固定帧数保证就绪。"
+          },
+          "frames": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "可选验证帧数；截图后至少保留 3 帧回读。"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 580,
+            "description": "可选验证秒数；显式预算不会自动增加。"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 4096,
+            "description": "本轮窗口宽度，不保存到发布配置。"
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 4096,
+            "description": "本轮窗口高度，不保存到发布配置。"
+          },
+          "nosound": {
+            "type": "boolean",
+            "description": "本轮是否静音。"
+          }
+        }
+      }
     },
     {
       "name": "maker_build",

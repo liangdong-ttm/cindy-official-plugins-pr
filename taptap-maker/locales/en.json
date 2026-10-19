@@ -85,6 +85,38 @@
     },
     "maker_console": {
       "description": "Open Maker console. Starts a local service; does not build, submit, or install a game runtime. Closing the page does not stop the service; stop it in the console. Media switches apply to Agent tools, not manual console actions."
+    },
+    "maker_validate": {
+      "description": "Run local Lua validation or screenshots in the current workspace using the bundled Runtime, without a project Skill, commits or remote builds. Single-player only; refuses active or unverified previews. Does not stop previews, install Runtime or update the dev kit. Read taptap-maker/local-validation.md first. COMPLETED is not PASS; inspect reports and screenshots.",
+      "parameters": {
+        "/properties/mode": {
+          "description": "Validation mode; defaults to validate. Screenshot modes require screenshot_frame."
+        },
+        "/properties/entry": {
+          "description": "Optional existing Lua entry relative to the project scripts directory."
+        },
+        "/properties/test": {
+          "description": "Optional existing V assertion script relative to the project scripts directory."
+        },
+        "/properties/screenshot_frame": {
+          "description": "Select the capture frame for the current loading state; no fixed frame guarantees readiness."
+        },
+        "/properties/frames": {
+          "description": "Optional validation frame count; keep at least three readback frames after capture."
+        },
+        "/properties/timeout_seconds": {
+          "description": "Optional validation budget in seconds; explicit budgets are not automatically increased."
+        },
+        "/properties/width": {
+          "description": "Width for this run only; does not change publish settings."
+        },
+        "/properties/height": {
+          "description": "Height for this run only; does not change publish settings."
+        },
+        "/properties/nosound": {
+          "description": "Mute this validation run."
+        }
+      }
     }
   }
 }

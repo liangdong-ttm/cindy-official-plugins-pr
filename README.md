@@ -392,13 +392,13 @@ plugin text and every tool description. Then follow
 package; before merging, install and verify the exact `.cindy` on a real device
 running an eligible stable production or Beta Cindy build, then check the attestation.
 
-`taptap-maker/vendor/taptap-maker/` ships the official `@taptap/maker@0.0.34`
+`taptap-maker/vendor/taptap-maker/` ships the official `@taptap/maker@0.0.37`
 with the plugin. When upgrading, replace the published npm package content
 wholesale and bump the plugin version accordingly. Preserve these reviewed Cindy
 compatibility patches until the official package includes equivalent fixes:
 
 - `normalizeRemoteProxyExecutionState` accepts `executed`, preserving confirmed
-  execution (original patch: `ff54f59`).
+  execution through the new state aggregator too (original patch: `ff54f59`); conflicting states become `unknown`.
 - The BLACKLISTED `tools/call` rejection includes `structuredContent` with
   `success: false`, its message, and `execution_state: "not_executed"`, so Cindy's
   error sanitizer retains the execution state.
@@ -410,6 +410,12 @@ compatibility patches until the official package includes equivalent fixes:
   instead of using a startup-only `accessStatePromise`; PAT changes take effect
   without waiting for the old Runtime process to expire. This adds an authentication
   check to each of these requests; it does not change the upstream access policy.
+- MAC-expiry recovery retries only explicitly `not_executed` requests, once;
+  executed, unknown and unstated results are not replayed.
+- Cindy console identity includes its distribution and entry path, preventing
+  reuse of a same-version standalone or different plugin Runtime.
+- In Cindy distribution, the console hides model settings, rejects custom API
+  configuration and uses Server API recognition only; unavailable service reports an error without provider fallback.
 
 Apart from these patches and the retained `LICENSE`, vendor files must match the
 official npm package. Recheck the patch list and regression tests on every upgrade;
@@ -417,6 +423,11 @@ do not add unrelated manual bundle edits.
 
 Historical failures, superseded fixes and upgrade checks are recorded in the
 [Maker maintenance checklist](./docs/taptap-maker-maintenance.md).
+
+Plugin 2.1.17 adds `maker_validate` for local Lua checks/screenshots through the
+trusted current workspace and bundled Runtime. Cindy's Manual supplies the workflow
+without requiring a project Skill. It does not install Runtime, submit or build;
+original reports and Skill-maintenance warnings remain separate from game PASS.
 
 ## Community
 

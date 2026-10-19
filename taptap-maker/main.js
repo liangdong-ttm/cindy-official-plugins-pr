@@ -75,8 +75,8 @@ function parseAccountResult(result) {
   throw new Error('TapTap Maker 账号 Runtime 返回了无法识别的结果');
 }
 
-async function accountRequest(action, payload, longRunning) {
-  var args = Object.assign({ action: action }, payload || {});
+async function accountRequest(action, payload, longRunning, preserveFailure) {
+  var args = Object.assign({}, payload || {}, { action: action });
   var result = await nodeRequest({
     entry: ACCOUNT_ENTRY,
     method: 'tools/call',
@@ -88,7 +88,7 @@ async function accountRequest(action, payload, longRunning) {
     ...(longRunning ? { maxTotalMs: 900000 } : {}),
   });
   var parsed = parseAccountResult(result);
-  if (parsed.ok === false) {
+  if (parsed.ok === false && !preserveFailure) {
     var failure = new Error(parsed.message || 'TapTap Maker 账号操作失败');
     if (['not_executed', 'executed', 'unknown'].includes(parsed.execution_state)) {
       failure.execution_state = parsed.execution_state;
@@ -664,6 +664,11 @@ function previewUrlFromResult(result) {
 
 async function handleTool(message) {
   var args = withoutSessionContext(message.args);
+  if (message.tool === 'maker_validate') {
+    var validationContext = requireWritableContext(requireLocalContext(message));
+    return publicAccountResult(await accountRequest('local_validate',
+      Object.assign({}, args, { workdir: validationContext.workdir }), true, true));
+  }
   if (message.tool === 'maker_console') {
     return openMakerConsole(requireWritableContext(requireLocalContext(message)));
   }

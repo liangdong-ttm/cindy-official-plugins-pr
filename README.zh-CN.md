@@ -322,11 +322,11 @@ unzip -Z1 /tmp/my-plugin-1.0.0.cindy
 `.cindy` 包完成验证，再勾选实机验证项。
 
 `taptap-maker/vendor/taptap-maker/` 固定随插件分发官方
-`@taptap/maker@0.0.34`。升级时应整体替换 npm 包发布内容并同步更新插件版本，
+`@taptap/maker@0.0.37`。升级时应整体替换 npm 包发布内容并同步更新插件版本，
 在官方包包含等价修复前，保留以下经审查的 Cindy 兼容补丁：
 
 - `normalizeRemoteProxyExecutionState` 接受 `executed`，保留确定已执行状态
-  （最初补丁：`ff54f59`）。
+  （最初补丁：`ff54f59`）；新版状态汇总函数也保留该状态，冲突时返回 `unknown`。
 - BLACKLISTED 的 `tools/call` 拦截返回 `structuredContent`，包含
   `success: false`、原提示和 `execution_state: "not_executed"`，确保 Cindy
   错误清洗后仍保留执行态。
@@ -337,12 +337,20 @@ unzip -Z1 /tmp/my-plugin-1.0.0.cindy
 - `tools/list`、`resources/read`、`tools/call` 按请求检查账号访问状态，
   不使用启动时的 `accessStatePromise` 缓存；更换 PAT 后无需等待旧 Runtime
   进程过期。每次上述请求增加一次鉴权检查，但不改变上游访问限制策略。
+- MAC 失效恢复仅对明确 `not_executed` 的请求重试一次；已执行、未知或未提供状态时不重放。
+- Cindy 控制台启动身份包含分发类型和入口路径，不复用同版本独立安装或另一插件的 Runtime。
+- Cindy 分发隐藏控制台模型设置入口，不支持自定义 API 配置；识图仅用 Server API，
+  服务不可用时直接报错，不回退到其他识图方式。
 
 除以上补丁和保留的 `LICENSE` 外，vendor 文件必须与官方 npm 包一致。
 每次升级都需核对补丁清单和回归测试，不要增加无关的 bundle 手工修改。
 
 历史故障、已被替换的修复及升级验收要求见
 [Maker 维护避坑清单](./docs/taptap-maker-maintenance.zh-CN.md)。
+
+插件 2.1.17 新增 `maker_validate`，通过当前可信工作区和随包 Runtime 做本地 Lua
+验证/截图；Cindy Manual 提供流程，不依赖项目 Skill 安装，不自动安装 Runtime、
+提交或构建。保留原报告与 Skill 维护告警，区分采集完成和游戏 PASS。
 
 ## 社区
 

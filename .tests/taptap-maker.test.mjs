@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -504,7 +505,7 @@ function loadAccountInternals() {
 test('manifest、手动安装策略和官方 Runtime 版本保持一致', () => {
   assert.equal(manifest.id, 'taptap-maker');
   assert.equal(manifest.author, 'Cindy');
-  assert.equal(manifest.version, '2.1.15');
+  assert.equal(manifest.version, '2.1.17');
   assert.equal(manifest.minCindyVersion, '0.1.64');
   assert.match(
     manifest.tools.find((tool) => tool.name === 'maker_build').description,
@@ -551,7 +552,7 @@ test('manifest、手动安装策略和官方 Runtime 版本保持一致', () => 
   assert.match(consoleTool.description, /不自动构建、提交或安装游戏运行环境/);
   assert.deepEqual(provisioning.ghosts['taptap-maker'], { audience: { emails: [] } });
   assert.equal(vendorPackage.name, '@taptap/maker');
-  assert.equal(vendorPackage.version, '0.0.34');
+  assert.equal(vendorPackage.version, '0.0.37');
   assert.match(makerMcpSource, /TAPTAP_MAKER_DISTRIBUTION = 'cindy_plugin'/);
   assert.match(makerChildSource, /TAPTAP_MAKER_DISTRIBUTION = 'cindy_plugin'/);
   const statusTool = manifest.tools.find((tool) => tool.name === 'maker_status');
@@ -618,6 +619,30 @@ test('manifest、手动安装策略和官方 Runtime 版本保持一致', () => 
   );
 });
 
+test('maker_validate uses only the trusted current workspace and fixed action', async () => {
+  const harness = createMainHarness(async () => ({ ok: true, result: { structuredContent: {
+    ok: true, execution_state: 'executed', validation: { result: 'COMPLETED', report: { result: 'FAIL' } },
+  } } }));
+  const result = await harness.call('maker_validate', { frames: 60, action: 'init', workdir: '/other',
+    session_context: imageSessionContext });
+  assert.equal(result.result.validation.report.result, 'FAIL');
+  const request = harness.nodeRequests[0];
+  assert.equal(request.entry, 'node/account.cjs');
+  assert.equal(request.params.arguments.action, 'local_validate');
+  assert.equal(request.params.arguments.workdir, imageSessionContext.workdir);
+  assert.equal(request.params.arguments.frames, 60);
+});
+
+test('maker_validate refuses readonly sessions before spawning a worker', async () => {
+  const harness = createMainHarness(async () => { throw new Error('must not dispatch'); });
+  const result = await harness.call('maker_validate', {
+    session_context: { ...imageSessionContext, workdir_is_read_only: true },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /只读/);
+  assert.equal(harness.nodeRequests.length, 0);
+});
+
 test('官方 Runtime 保留远端错误结果的 executed 执行态', () => {
   const functionSource = vendorMakerSource.match(
     /function normalizeRemoteProxyExecutionState\(value\) \{[\s\S]*?\n\}/,
@@ -631,7 +656,8 @@ test('官方 Runtime 保留远端错误结果的 executed 执行态', () => {
 });
 
 test('Runtime 错误包装保留执行三态并禁止自动重试', () => {
-  const names = ['normalizeRemoteProxyExecutionState', 'addRemoteProxyErrorExecutionState'];
+  const names = ['normalizeRemoteProxyExecutionState', 'getRemoteProxyExecutionState',
+    'isTextContent', 'parseJsonObject', 'addRemoteProxyErrorExecutionState'];
   const functions = names.map((name) => {
     const match = vendorMakerSource.match(new RegExp('function ' + name + '\\([^]*?\n\\}'));
     assert.ok(match, name);
@@ -643,6 +669,7 @@ test('Runtime 错误包装保留执行三态并禁止自动重试', () => {
     for (const input of [
       { isError: true, structuredContent: { execution_state: state } },
       { isError: true, execution_state: state },
+      { isError: true, content: [{ type: 'text', text: JSON.stringify({ execution_state: state }) }] },
     ]) {
       const output = context.addRemoteProxyErrorExecutionState(input);
       assert.equal(output.structuredContent.execution_state, state);
@@ -652,6 +679,63 @@ test('Runtime 错误包装保留执行三态并禁止自动重试', () => {
   const missing = context.addRemoteProxyErrorExecutionState({ isError: true });
   assert.equal(missing.structuredContent.execution_state, 'unknown');
   assert.equal(missing.structuredContent.automatic_retry, false);
+  for (const state of ['unknown', 'not_executed']) {
+    const conflict = context.addRemoteProxyErrorExecutionState({
+      isError: true, execution_state: 'executed', structuredContent: { execution_state: state },
+    });
+    assert.equal(conflict.structuredContent.execution_state, 'unknown');
+    assert.equal(conflict.structuredContent.automatic_retry, false);
+  }
+});
+
+test('Runtime MAC 失效只重试明确未执行的请求一次', async () => {
+  const names = ['callRemoteProxyTool', 'normalizeRemoteProxyExecutionState',
+    'getRemoteProxyExecutionState', 'isTextContent', 'parseJsonObject', 'remoteProxyFailureState'];
+  const source = names.map((name) => {
+    const match = vendorMakerSource.match(new RegExp('(?:async )?function ' + name + '\\([^]*?\n\\}'));
+    assert.ok(match, name);
+    return match[0];
+  }).join('\n');
+  class RemoteProxyToolCallError extends Error {
+    constructor(name, state, error) {
+      super(error.message);
+      this.executionState = state;
+    }
+  }
+  for (const scenario of ['executed', 'unknown', undefined, 'not_executed', 'disconnect', 'pre_dispatch']) {
+    let calls = 0;
+    let refreshes = 0;
+    const context = createContext({
+      RemoteProxyToolCallError, McpError: class extends Error {}, ErrorCode: { InvalidRequest: -32600 },
+      MAKER_REMOTE_PROXY_EXPOSED_TOOL_NAMES: [], MAKER_TOOL_CALL_TIMEOUT_MS: 1000,
+      createRemoteProxyContext: () => ({ projectRoot: '/example-project' }),
+      prepareRemoteProxyToolArgsAsync: async ({ args }) => args,
+      materializeRemoteProxyToolAssets: async ({ result }) => result,
+      isRecord2: (value) => value !== null && typeof value === 'object',
+      isMakerMacExpiredFailure: () => true,
+      getMakerEnvironment: () => 'production',
+      requestTapAuthWithPat: async () => { refreshes += 1; },
+    });
+    new Script(source).runInContext(context);
+    const operation = context.callRemoteProxyTool({
+      targetDir: '/example-project', name: 'confirm_character_voice', args: {},
+      manager: { callTool: async (_proxy, _request, _options, dispatched) => {
+        calls += 1;
+        if (scenario !== 'pre_dispatch') dispatched();
+        if (scenario === 'disconnect' || scenario === 'pre_dispatch') throw new Error('授权已失效');
+        return { isError: true, execution_state: scenario };
+      } },
+    });
+    if (scenario === 'disconnect' || scenario === 'pre_dispatch') {
+      await assert.rejects(operation, (error) => error.executionState ===
+        (scenario === 'disconnect' ? 'unknown' : 'not_executed'));
+    } else {
+      await operation;
+    }
+    const retry = scenario === 'not_executed' || scenario === 'pre_dispatch';
+    assert.equal(calls, retry ? 2 : 1, String(scenario));
+    assert.equal(refreshes, retry ? 1 : 0, String(scenario));
+  }
 });
 
 test('Runtime 账号检查仅在明确 BLACKLISTED 时阻止访问', async () => {
@@ -683,7 +767,7 @@ test('Runtime user-skills pull 拒绝写入根路径中的符号链接', () => {
   const calls = [];
   const context = createContext({
     [match[0].match(/current = (path\d*)\.join/)[1]]: { join: (...parts) => parts.join('/') },
-    pathExists: (value) => value.endsWith('/.codex'),
+    [match[0].match(/(pathExists\d*)\(current\)/)[1]]: (value) => value.endsWith('/.codex'),
     [match[0].match(/(fs\d*)\.lstatSync/)[1]]: { lstatSync: () => ({ isSymbolicLink: () => true }) },
   });
   new Script(match[0]).runInContext(context);
@@ -829,6 +913,53 @@ test('设置页跟随宿主四语言并以英文回退', () => {
   for (const key of ['openConsole', 'consoleHint', 'consoleReady', 'consoleFailed']) {
     assert.ok(Object.prototype.hasOwnProperty.call(messages.en, key), key);
   }
+});
+
+test('Cindy 控制台不会复用同版本的独立 Runtime 或其他插件入口', () => {
+  const match = vendorMakerSource.match(/function createConsoleLauncherIdentity\([^]*?\n\}/);
+  assert.ok(match);
+  const environment = {};
+  const context = createContext({
+    [match[0].match(/return (createHash\d*)\(/)[1]]: createHash,
+    CONSOLE_PROTOCOL_VERSION: 3, process: { env: environment },
+  });
+  new Script(match[0]).runInContext(context);
+  const identity = (entry) => context.createConsoleLauncherIdentity('0.0.37', { entry, mtimeMs: 1 });
+  const standalone = identity('/example/standalone/maker.js');
+  environment.TAPTAP_MAKER_DISTRIBUTION = 'cindy_plugin';
+  assert.notEqual(identity('/example/standalone/maker.js'), standalone);
+  assert.notEqual(identity('/example/plugin-a/maker.js'), identity('/example/plugin-b/maker.js'));
+  assert.equal(identity('/example/plugin-a/maker.js'), identity('/example/plugin-a/maker.js'));
+});
+
+test('Cindy 识图固定 Server，服务不可用时报错且独立 Maker 保留原回退', async () => {
+  const names = ['emptyModelSettings', 'readModelSettings', 'configuredUiVisionModels',
+    'resolvedUiVisionModels', 'resolvedModelSettingsForDisplay'];
+  const source = names.map((name) => {
+    const match = vendorMakerSource.match(new RegExp('(?:async )?function ' + name + '\\([^]*?\n\\}'));
+    assert.ok(match, name);
+    return match[0];
+  }).join('\n');
+  const environment = { TAPTAP_MAKER_DISTRIBUTION: 'cindy_plugin' };
+  let available = true;
+  const context = createContext({
+    process: { env: environment }, UI_VISION_MODEL: 'fixture-model',
+    fetch: () => { throw new Error('Unexpected network call'); },
+    ConsoleError: class extends Error {},
+    readVisionSettings: () => undefined,
+    modelSettingsForDisplay: () => ({ vision: { source: 'server' }, profiles: [] }),
+    serverRecognitionAvailable: async () => available,
+  });
+  new Script(source).runInContext(context);
+  assert.equal(context.readModelSettings().vision.source, 'server');
+  assert.equal(context.readModelSettings().profiles.length, 0);
+  assert.equal((await context.resolvedUiVisionModels())[0].source, 'server');
+  available = false;
+  await assert.rejects(context.resolvedUiVisionModels(), /Server 识图暂不可用/);
+  assert.equal((await context.resolvedModelSettingsForDisplay()).vision.source, 'server');
+  environment.TAPTAP_MAKER_DISTRIBUTION = 'standalone';
+  assert.equal((await context.resolvedUiVisionModels())[0].source, 'chatgpt-web');
+  assert.equal((await context.resolvedModelSettingsForDisplay()).vision.source, 'chatgpt-web');
 });
 
 test('maker_console 只打开已校验的 loopback 控制台地址', async () => {
@@ -2526,6 +2657,35 @@ test('只在 Maker CLI 最终 JSON 到达后判定完成', () => {
     ['doctor', '--json'],
     '{"env":"production","git":{"ready":true}}\n',
   ), true);
+});
+
+test('新版 Runtime transport 能回收 Cindy 代理子进程', async () => {
+  const match = vendorMakerSource.match(/HiddenStdioClientTransport = class \{[^]*?\n    \};/);
+  assert.ok(match);
+  const handle = fakeChildHandle();
+  let kills = 0;
+  handle.kill = () => {
+    kills += 1;
+    handle.emit('exit', null, 'SIGTERM');
+    handle.emit('close', null, 'SIGTERM');
+    return true;
+  };
+  const child = adapter.createDeferredChild(Promise.resolve(handle), {});
+  assert.equal(child.exitCode, null);
+  assert.equal(child.signalCode, null);
+  const context = createContext({
+    PassThrough, ReadBuffer: class { clear() {} },
+    spawn: () => child, process: { platform: 'win32' },
+    setTimeout: (callback) => setTimeout(callback, 5), clearTimeout,
+  });
+  new Script(match[0]).runInContext(context);
+  const transport = new context.HiddenStdioClientTransport({ command: 'node', stderr: 'pipe' });
+  await transport.start();
+  await transport.close();
+  assert.equal(kills, 1);
+  assert.equal(child.signalCode, 'SIGTERM');
+  await transport.close();
+  assert.equal(kills, 1);
 });
 
 test('deferred child 会保留宿主答复前写入 stdin 的 PAT 字节', async () => {

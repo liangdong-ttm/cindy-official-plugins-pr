@@ -1,6 +1,6 @@
 {
   "name": "@taptap/maker",
-  "version": "0.0.34",
+  "version": "0.0.37",
   "type": "module",
   "description": "TapTap Maker local development CLI and MCP server",
   "main": "dist/maker.js",
@@ -14,6 +14,9 @@
   "files": [
     "bin/taptap-maker",
     "dist/maker.js",
+    "skills/maker-ui-workflow/",
+    "skills/maker-ui-bbox-workflow/",
+    "skills/lua-ui-to-json/",
     "skills/taptap-maker-local/",
     "skills/taptap-maker-dev-kit-guide/",
     "skills/update-taptap-mcp/",

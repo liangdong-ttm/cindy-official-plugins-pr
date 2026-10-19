@@ -4,8 +4,24 @@
 
 ## 先读结论
 
+### 2.1.17：Cindy 本地验证入口
+
+`maker_validate` 通过现有固定 Node 入口调用同包 `preview status`、`preview validate`，
+不修改 vendor、独立 MCP 或项目 Skill。Manual 承接 Cindy 的验证工作流；源目录缺失、
+已安装副本和异常链接分别返回。官方 0.0.37 的 Skill 源目录检查与本包相同，
+不能将其直接归为 Cindy 特有缺陷。
+
+必须保留：当前可信工作区覆盖输入、只读拦截、活动/未确认预览不接管；固定 CLI 参数；
+完整终态 JSON 后才回收 Electron CLI；非零退出的有效失败报告及部分证据；
+COMPLETED 不等于 PASS。证据固定归档到项目 `.maker/validation-evidence/`，拒绝目录链接。
+不自动下载安装 Runtime、更新开发工具包或修复项目占用文件。
+
+本次升级为插件 2.1.16 / Runtime 0.0.37；八项 bundle 补丁见仓库 README，
+另有子进程兼容适配。下文五项补丁清单与实机结果属于
+0.0.33/0.0.34 历史基线，不代表 0.0.37 已完成实机验收。
+
 - 不能为了让 vendor 与官方包完全一致，直接删除 Cindy 的修复。
-- 当前 vendor 有 **五项**兼容补丁，不是只有 executed 一项。
+- 历史 0.0.34 vendor 有 **五项**兼容补丁，不是只有 executed 一项；0.0.37 为八项。
 - **日志没有整体关闭**：移除的是 Cindy 对远端日志 watcher 的接管和空闲回收；watcher 改用系统 Node，由 Maker 管生命周期。
 - PAT 保存和校验已经调用 Maker CLI；Cindy 额外承担状态判断、脱敏、界面和进程兼容，不能把这些全当成重复实现删除。
 - 新版本号或相同关键词不能证明旧问题已修复。必须核对实际发布包和回归行为。

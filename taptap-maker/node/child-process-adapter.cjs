@@ -24,6 +24,8 @@ function createDeferredChild(startPromise, options) {
   child.stdout = stdout;
   child.stderr = stderr;
   child.pid = undefined;
+  child.exitCode = null;
+  child.signalCode = null;
   child.killed = false;
   child.ref = function ref() {
     return child;
@@ -73,11 +75,15 @@ function createDeferredChild(startPromise, options) {
     nextHandle.once('exit', function onExit(code, signal) {
       if (exited) return;
       exited = true;
+      child.exitCode = code == null ? null : code;
+      child.signalCode = signal || null;
       child.killed = true;
       child.emit('exit', code, signal);
     });
     nextHandle.once('close', function onClose(code, signal) {
       exited = true;
+      child.exitCode = code == null ? child.exitCode : code;
+      child.signalCode = signal || child.signalCode;
       child.killed = true;
       finishStreams();
       detachAbortListener();
@@ -93,6 +99,7 @@ function createDeferredChild(startPromise, options) {
     });
   }).catch(function onStartError(error) {
     exited = true;
+    child.exitCode = -1;
     child.killed = true;
     finishStreams();
     detachAbortListener();
@@ -141,6 +148,15 @@ function isMakerCliOutputComplete(args, output) {
   if (command === 'apps') return values.length === 1 && Array.isArray(last);
   if (!last || typeof last !== 'object' || Array.isArray(last)) return false;
   if (command === 'doctor') return values.length === 1;
+  if (command === 'preview' && args[1] === 'status') {
+    return values.length === 1 && last.protocol_version === 1 && typeof last.ok === 'boolean'
+      && ((typeof last.process_alive === 'boolean' && typeof last.state === 'string')
+        || (last.ok === false && last.result === 'FAIL' && typeof last.error === 'string'));
+  }
+  if (command === 'preview' && args[1] === 'validate') {
+    return values.length === 1 && typeof last.ok === 'boolean' && !last.event
+      && ['COMPLETED', 'FAIL', 'TIMEOUT', 'CANCELLED', 'UNSUPPORTED'].includes(last.result);
+  }
   if (command === 'init') return last.step === 'done' && last.status === 'ok';
   if (command === 'login') {
     return Boolean(last.step === 'login'
