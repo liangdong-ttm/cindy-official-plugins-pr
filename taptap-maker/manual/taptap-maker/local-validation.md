@@ -9,7 +9,10 @@
    仅支持单机；联网项目不可擅自改为单机。只读会话拒绝执行。
 2. 默认 `mode=validate` 取得报告；需要看画面用 `mode=both` 或 `screenshot`，并按当前游戏
    加载流程选择 `screenshot_frame`，没有固定帧数保证就绪。可选 `entry`、`test` 都是项目脚本目录下的相对路径。
-3. 工具先检查真实预览状态；有活动窗口或归属不明时拒绝，不自动停止或接管。Runtime 未安装时
+   frames、test 仅适用于 validate/both；screenshot_frame 仅适用于 screenshot/both。
+3. 验证要求项目 .maker/validation-evidence/ 已被 Git 忽略且没有已跟踪文件；检查失败时拒绝派发。
+   按提示核对忽略规则和索引，不自动改写 .gitignore 或移除已跟踪文件。
+   工具随后检查真实预览状态；有活动窗口或归属不明时拒绝，不自动停止或接管。Runtime 未安装时
    如实报告，验证不自动下载安装；活动预览需按用户明确意图处理，不能为运行检查擅自停止。
 4. `timeout_seconds` 是单轮验证预算；包括自动截图重试在内，整个 CLI 调用最多 14 分钟。
    该总时限优先于单轮预算，超过后停止并返回状态未知，不保证耗尽所有重试次数，也不自动重试。
@@ -39,7 +42,7 @@ Cindy 使用本插件 Manual 提供验证流程，不要求项目中先装 `run-
 - 明确授权后才修改项目；相关修复最多两轮自动尝试。修改后复测同一目标，不能把测试包装遗漏
   当作游戏缺陷，也不能重复调用原入口已经订阅的 Start/Update。
 - 报告和 PNG 归档到项目 `.maker/validation-evidence/<run-id>/`，返回 `evidence` 为可读取的
-  项目相对路径。缺少归档或采集失败如实报告。保留每轮证据，不反复启动 Runtime 轮询进度。
+  项目相对路径；返回值移除 Runtime 的结构化绝对路径字段，磁盘原始报告不变。缺少归档或采集失败如实报告。保留每轮证据，不反复启动 Runtime 轮询进度。
 - 大结果返回 `validation.summary_only=true`，保留采集结果、报告结论、错误计数及断言状态；
   这不是完整报告。必须读取 `full_result_file` 指向的原始 `result.json` 和相关证据，不能只看摘要。
   原文件不截断、不改写；`full_result_file=null` 表示没有确认可读的归档，不能宣称完整报告已交付。

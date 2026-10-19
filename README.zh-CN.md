@@ -352,6 +352,9 @@ unzip -Z1 /tmp/my-plugin-1.0.0.cindy
 验证/截图；Cindy Manual 提供流程，不依赖项目 Skill 安装，不自动安装 Runtime、
 提交或构建。保留原报告与 Skill 维护告警，区分采集完成和游戏 PASS。
 
+插件 2.1.19 另检查验证证据是否已被 Git 忽略且未跟踪，拒绝不兼容的模式参数，
+清理返回值中的 Runtime 结构化路径；大报告返回有大小限制的摘要和完整证据路径。
+
 ## 社区
 
 提 PR 前请读 [`CONTRIBUTING.zh-CN.md`](./CONTRIBUTING.zh-CN.md)：其中包含 PR 标题规范、必须同步

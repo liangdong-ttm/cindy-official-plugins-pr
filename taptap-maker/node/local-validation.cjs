@@ -2,6 +2,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const execFile = require('node:util').promisify(require('node:child_process').execFile);
 
 const MAX_VALIDATION_STDOUT_BYTES = 8 * 1024 * 1024;
 const MAX_INLINE_RESULT_BYTES = 64 * 1024;
@@ -67,6 +68,12 @@ function validationArgs(args, root) {
   }
   const mode = args.mode === undefined ? 'validate' : args.mode;
   if (!['validate', 'screenshot', 'both'].includes(mode)) throw new Error('Invalid validation mode');
+  if (mode === 'screenshot' && (args.frames !== undefined || args.test !== undefined)) {
+    throw new Error('frames/test 仅适用于 validate 或 both 模式；截图模式请移除这两个参数。');
+  }
+  if (mode === 'validate' && args.screenshot_frame !== undefined) {
+    throw new Error('screenshot_frame 仅适用于 screenshot 或 both 模式。');
+  }
   if (mode !== 'validate' && args.screenshot_frame === undefined) {
     throw new Error('screenshot_frame is required for screenshot or both mode');
   }
@@ -117,6 +124,26 @@ function inlineValidation(validation) {
   };
 }
 
+async function assertEvidenceIgnored(root) {
+  const options = { cwd: root, shell: false, windowsHide: true, timeout: 5000, maxBuffer: 1024 * 1024 };
+  try {
+    await execFile('git', ['check-ignore', '-q', '--', '.maker/validation-evidence/'], options);
+    // Ignore rules do not protect files that are already in Git's index.
+    const tracked = await execFile('git', ['ls-files', '-z', '--', '.maker/validation-evidence'], options);
+    if (tracked.stdout.length) throw new Error('Tracked validation evidence');
+  } catch {
+    throw new Error('无法确认验证证据不会被 Git 提交。请确保 Git 可用、项目属于 Git 工作树，'
+      + '将 .maker/validation-evidence/ 加入忽略规则，并确认该目录没有已跟踪文件后再验证。');
+  }
+}
+
+function withoutRuntimePaths(value) {
+  if (value == null) return value;
+  const privateKeys = new Set(['project_realpath', 'archive_directory', 'evidence_directory',
+    'source_evidence_directory', 'log_path', 'invocation_path']);
+  return JSON.parse(JSON.stringify(value, (key, item) => privateKeys.has(key) ? undefined : item));
+}
+
 async function runLocalValidation(args, runMaker, parseJsonOutput) {
   let root;
   let cliArgs;
@@ -137,6 +164,7 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
         if (error.code !== 'ENOENT') throw error;
       }
     }
+    await assertEvidenceIgnored(root);
     cliArgs.push('--output-dir', directory);
   } catch (error) {
     return { ok: false, execution_state: 'not_executed', automatic_retry: false,
@@ -153,7 +181,7 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
     if (!confirmedStopped) {
       return { ok: false, execution_state: 'not_executed', automatic_retry: false,
         message: status && typeof status.error === 'string' ? status.error
-          : '本地预览仍在运行或状态未确认；未停止或接管窗口，请先核对预览状态。', skill, status };
+          : '本地预览仍在运行或状态未确认；未停止或接管窗口，请先核对预览状态。', skill, status: withoutRuntimePaths(status) };
     }
     dispatched = true;
     const output = await runMaker(cliArgs, undefined, {
@@ -175,7 +203,7 @@ async function runLocalValidation(args, runMaker, parseJsonOutput) {
         }
       }
     }
-    const inline = inlineValidation(validation);
+    const inline = withoutRuntimePaths(inlineValidation(validation));
     return { ok: true, execution_state: 'executed', automatic_retry: false,
       workflow: 'taptap-maker/local-validation.md', skill, validation: inline, evidence,
       ...(inline.summary_only ? { full_result_file: evidence.find(file => file.endsWith('/result.json')) || null } : {}),

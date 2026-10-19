@@ -429,6 +429,10 @@ trusted current workspace and bundled Runtime. Cindy's Manual supplies the workf
 without requiring a project Skill. It does not install Runtime, submit or build;
 original reports and Skill-maintenance warnings remain separate from game PASS.
 
+Plugin 2.1.19 also checks that validation evidence is ignored and untracked in Git,
+rejects incompatible mode arguments, removes structured Runtime paths from responses,
+and returns bounded summaries for large reports with links to the full evidence.
+
 ## Community
 
 Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) before opening a PR — it covers

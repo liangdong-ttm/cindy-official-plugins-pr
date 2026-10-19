@@ -67,9 +67,12 @@
 | P2 / 36cac63、52f15ee、8e9defb | 完整第三方许可证与最终 .cindy 法律文件。 | 比新旧包新增/替换依赖及嵌入 wasm/编码 UI 资源，对照官方来源；法律文本不是只列包名。保留 vendor/LICENSE 与根 LICENSE/NOTICE 等发布约定；核对实际包大小/路径/内容。0.0.37 的新依赖不能沿用 0.0.34 notices 宣称已齐。 |
 | P3 / c58a81a、8e9defb | .github/scripts/sync-maker-runtime.mjs + 逐版本 recipe。 | npm 身份/integrity、原 bundle hash、每补丁 anchor count、patched hash、完整 vendorHashes、语法检查；tar 路径/链接/特殊文件检查先于解包。锚点错误/额外或缺文件拒绝；staging 成功才替换，失败保留/回滚原 vendor。现有升级测试含离线反推原包验证，不替代本次实际官方下载完整性。 |
 
-## 0.0.37 当前验证边界（2026-10-19 快照，不能用于以后版本验收）
+## 0.0.37 前序验证记录（2026-10-19，插件 2.1.16 历史快照）
 
-- 工作树插件 2.1.16 / Runtime 0.0.37；八项 recipe 补丁加 H2 facade 修改。官方 npm tarball 与 recipe integrity 对应，源 tag maker-v0.0.37/b3570c1 仅辅助核对；本地源码 package.json 的 dev 版本不是发布证据。
+当前 PR 包版本为 2.1.19，包含本地验证、大报告摘要、证据 Git 忽略检查和结构化路径清理。
+以下测试与实机缺口属于前序记录，不代表当前包已完成实机验收。
+
+- 当时工作树插件 2.1.16 / Runtime 0.0.37；八项 recipe 补丁加 H2 facade 修改。官方 npm tarball 与 recipe integrity 对应，源 tag maker-v0.0.37/b3570c1 仅辅助核对；本地源码 package.json 的 dev 版本不是发布证据。
 - 本轮前序已运行 Maker + upgrade 66 项通过；六套门禁共 93 项，86 通过、7 失败。失败涉及 Windows localization 路径及 publish-workflows 的 WSL/bash/jq 环境，不据此宣布完整门禁已通过，也不修改无关测试。
 - 系统 Node 隔离 HOME console 启动/health/HTML/关闭已做；无模型设置入口、server-only 配置、写设置 API 403、托管更新禁用已核对。未使用真实 PAT，也未调用付费生成。
 - 新增编码 UI 资源已与上游 tag 对照；没有为审查而执行编码内容。许可证已更新；实际打包不等于已安装。

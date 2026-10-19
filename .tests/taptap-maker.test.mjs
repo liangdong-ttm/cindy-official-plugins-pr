@@ -507,6 +507,8 @@ function loadAccountInternals(nodeApi) {
 test('large validation reports retain archive evidence without exceeding the Host RPC line limit', async t => {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cindy-validation-report-')));
   t.after(() => rm(root, { recursive: true, force: true }));
+  childProcess.execFileSync('git', ['init', '-q', root]);
+  await writeFile(path.join(root, '.gitignore'), '.maker/validation-evidence/\n');
   const archive = path.join(root, '.maker/validation-evidence/test-run');
   await mkdir(archive, { recursive: true });
   const report = { result: 'FAIL', test_result: 'FAILED', frames_completed: 60,
@@ -553,7 +555,7 @@ test('account commands retain their existing output limit', async () => {
 test('manifest、手动安装策略和官方 Runtime 版本保持一致', () => {
   assert.equal(manifest.id, 'taptap-maker');
   assert.equal(manifest.author, 'Cindy');
-  assert.equal(manifest.version, '2.1.18');
+  assert.equal(manifest.version, '2.1.19');
   assert.equal(manifest.minCindyVersion, '0.1.64');
   assert.match(
     manifest.tools.find((tool) => tool.name === 'maker_build').description,

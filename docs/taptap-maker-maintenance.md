@@ -4,6 +4,13 @@
 
 ## Read first
 
+### 2.1.19: validation arguments and evidence boundaries
+
+Validation checks Git ignore rules and the index without changing either. Unignored evidence,
+tracked files or failed checks prevent dispatch. Invalid mode-specific arguments are rejected.
+Structured Runtime absolute-path fields are removed from responses; relative evidence locations
+and original archived reports remain available.
+
 ### 2.1.18: Large validation reports
 
 Only local validation raises the CLI stdout limit to 8 MiB to receive Runtime's
@@ -27,7 +34,7 @@ reports and partial evidence on nonzero exit, and COMPLETED versus game PASS. Ev
 is confined to project `.maker/validation-evidence/` and directory links are rejected.
 Do not automatically install Runtime, update the dev kit or replace project files.
 
-Current upgrade: plugin 2.1.16 / Runtime 0.0.37, with eight bundle patches
+Current upgrade: plugin 2.1.19 / Runtime 0.0.37, with eight bundle patches
 listed in the repository README and updated child-process compatibility.
 The inventory and device results below describe the historical 0.0.33/0.0.34
 baseline, not device acceptance of 0.0.37.
