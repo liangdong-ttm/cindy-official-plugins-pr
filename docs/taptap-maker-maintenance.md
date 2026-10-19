@@ -34,7 +34,7 @@ reports and partial evidence on nonzero exit, and COMPLETED versus game PASS. Ev
 is confined to project `.maker/validation-evidence/` and directory links are rejected.
 Do not automatically install Runtime, update the dev kit or replace project files.
 
-Current upgrade: plugin 2.1.19 / Runtime 0.0.37, with eight bundle patches
+Current upgrade: plugin 2.1.20 / Runtime 0.0.37, with eight bundle patches
 listed in the repository README and updated child-process compatibility.
 The inventory and device results below describe the historical 0.0.33/0.0.34
 baseline, not device acceptance of 0.0.37.

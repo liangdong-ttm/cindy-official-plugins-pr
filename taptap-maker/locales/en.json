@@ -87,7 +87,7 @@
       "description": "Open Maker console. Starts a local service; does not build, submit, or install a game runtime. Closing the page does not stop the service; stop it in the console. Media switches apply to Agent tools, not manual console actions."
     },
     "maker_validate": {
-      "description": "Run local Lua validation or screenshots in the current workspace using the bundled Runtime, without a project Skill, commits or remote builds. Single-player only; refuses active or unverified previews. Does not stop previews, install Runtime or update the dev kit. Read taptap-maker/local-validation.md first. COMPLETED is not PASS; inspect reports and screenshots. Large results return a summary; read the full result through the evidence paths. Before validation, the evidence directory must be Git-ignored with no tracked files.",
+      "description": "Run local Lua validation or screenshots in the current workspace using the bundled Runtime, without a project Skill, commits or remote builds. Single-player only; refuses active or unverified previews. Does not stop previews, install Runtime or update the dev kit. Read taptap-maker/local-validation.md first. COMPLETED is not PASS; inspect reports and screenshots. Large results return a summary; read the full result through the evidence paths. Before validation, the evidence directory must be Git-ignored with no tracked files. Runtime may update .installer/local-skill-filter.json to remove the current platform's legacy run-lua-validate exclusion.",
       "parameters": {
         "/properties/mode": {
           "description": "Validation mode; defaults to validate. Screenshot modes require screenshot_frame."

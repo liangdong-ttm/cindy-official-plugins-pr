@@ -29,7 +29,7 @@
 COMPLETED 不等于 PASS。证据固定归档到项目 `.maker/validation-evidence/`，拒绝目录链接。
 不自动下载安装 Runtime、更新开发工具包或修复项目占用文件。
 
-本次升级为插件 2.1.19 / Runtime 0.0.37；八项 bundle 补丁见仓库 README，
+本次升级为插件 2.1.20 / Runtime 0.0.37；八项 bundle 补丁见仓库 README，
 另有子进程兼容适配。下文五项补丁清单与实机结果属于
 0.0.33/0.0.34 历史基线，不代表 0.0.37 已完成实机验收。
 

@@ -4,7 +4,7 @@
   "name": "TapTap Maker",
   "description": "使用插件随附的官方 TapTap Maker Runtime 连接账号、同步或初始化项目、构建游戏并打开官方预览；无需自行安装 CLI 或配置 MCP。",
   "whenToUse": "仅用于明确的 TapTap Maker 游戏项目操作：账号连接、项目初始化/检查、构建/运行/预览，或 Maker 专属素材、广告与调试。仅提到 TapTap、非 Maker 的平台/SDK/上架任务或本插件源码维护时不适用。",
-  "version": "2.1.19",
+  "version": "2.1.20",
   "minCindyVersion": "0.1.64",
   "locales": {
     "en": "locales/en.json",
@@ -105,7 +105,7 @@
     },
     {
       "name": "maker_validate",
-      "description": "使用插件随包 Runtime 对当前工作区做本地 Lua 验证或截图；不依赖项目 Skill 安装，不提交或远端构建。仅单机，有活动预览或状态未确认时拒绝，不自动停止、安装 Runtime 或更新开发工具包。先读 taptap-maker/local-validation.md；COMPLETED 不等于 PASS，必须检查原报告并查看截图。 大报告返回摘要，完整内容通过证据路径读取。",
+      "description": "使用插件随包 Runtime 对当前工作区做本地 Lua 验证或截图；不依赖项目 Skill 安装，不提交或远端构建。仅单机，有活动预览或状态未确认时拒绝，不自动停止、安装 Runtime 或更新开发工具包。先读 taptap-maker/local-validation.md；COMPLETED 不等于 PASS，必须检查原报告并查看截图。 大报告返回摘要，完整内容通过证据路径读取。 验证前要求证据目录已被 Git 忽略且无已跟踪文件。 Runtime 可能修复 .installer/local-skill-filter.json，移除当前平台对 run-lua-validate 的旧排除项。",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -125,19 +125,19 @@
           },
           "test": {
             "type": "string",
-            "description": "可选，项目脚本目录下已有的 V 断言脚本相对路径。"
+            "description": "可选，项目脚本目录下已有的 V 断言脚本相对路径。 仅 validate/both。"
           },
           "screenshot_frame": {
             "type": "integer",
             "minimum": 1,
             "maximum": 1000000,
-            "description": "按本次加载状态选择截图帧；无固定帧数保证就绪。"
+            "description": "按本次加载状态选择截图帧；无固定帧数保证就绪。 仅 screenshot/both。"
           },
           "frames": {
             "type": "integer",
             "minimum": 1,
             "maximum": 1000000,
-            "description": "可选验证帧数；截图后至少保留 3 帧回读。"
+            "description": "可选验证帧数；截图后至少保留 3 帧回读。 仅 validate/both。"
           },
           "timeout_seconds": {
             "type": "integer",
