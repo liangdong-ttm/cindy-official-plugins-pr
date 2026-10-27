@@ -4,7 +4,7 @@
 
 ## Read first
 
-### 2.1.25: Runtime 0.0.39 and request windows
+### 2.1.28: Runtime 0.0.39 and request windows
 
 Use the official npm release from local cache with a dedicated 0.0.39 recipe,
 preserving V1–V8. Raise the former 60-second window to 120 seconds for all dynamic
