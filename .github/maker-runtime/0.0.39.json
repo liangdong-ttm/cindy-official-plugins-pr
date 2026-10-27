@@ -3,7 +3,7 @@
   "version": "0.0.39",
   "integrity": "sha512-T91tiu63hKFeQBCk75Weaef1KHrtQLqVeWDvZF4C3q74+9fOV1t9wcrCE+5HuQNnlEUDeYTrYRxNzYa1Co+uNw==",
   "originalSha256": "49ab240e4e75a5dcf8833c1d2819651e7043e7ea6348d19cc959b15656fdde1a",
-  "patchedSha256": "a2e78bc698e140ba744b00fa651076850d384a2ed40d7bde6a0bcdd92e733a8e",
+  "patchedSha256": "4e2d122d13db62a70893a450007b7af3d31e8bfc39854d589745af2959498735",
   "patches": [
     {
       "id": "V1-executed-state",
@@ -189,13 +189,138 @@
           "count": 1
         }
       ]
+    },
+    {
+      "id": "V10-canvas-safe-recovery",
+      "edits": [
+        {
+          "before": "     * Automatic recovery for an unattended run: query the card's original task first and keep\n     * a result that did arrive. A task the server still reports as pending/running is left\n     * alone ('waiting') unless force is set, so it cannot be charged twice. Otherwise abandon\n     * its unknown or failed attempts so the next run of the card submits again. Nothing is\n     * submitted here.",
+          "after": "     * Recover original results; release only explicitly unexecuted requests for retry.\n     * A wait limit pauses recovery without discarding uncertain paid requests.",
+          "count": 1
+        },
+        {
+          "before": "      if (!force && [...attempts.values()].some(live)) return \"waiting\";\n      for (const attempt of attempts.values())\n        if (attempt.canvasId === documentState.id && attempt.targetNodeId === nodeId && [\"pending\", \"running\", \"unknown\", \"canceled\", \"failed\"].includes(attempt.status))\n          abandonedAttempts.add(attempt.id);",
+          "after": "      if ([...attempts.values()].some(live)) return force ? \"blocked\" : \"waiting\";\n      if (unconfirmedImages.has(documentState.id + \":\" + nodeId) || [...attempts.values()].some(\n        (attempt) => attempt.canvasId === documentState.id && attempt.targetNodeId === nodeId && !abandonedAttempts.has(attempt.id) && [\"unknown\", \"canceled\", \"failed\"].includes(attempt.status) && !explicitPreExecutionRejection(attempt)\n      )) return \"blocked\";\n      for (const attempt of attempts.values())\n        if (attempt.canvasId === documentState.id && attempt.targetNodeId === nodeId && explicitPreExecutionRejection(attempt))\n          abandonedAttempts.add(attempt.id);",
+          "count": 1
+        },
+        {
+          "before": "  async function recoverForRetry(nodeId, force = false) {\n    var _a3, _b;\n    const current = options3.current();\n    const node = current == null ? void 0 : current.nodes.find((item) => item.id === nodeId);\n    const pendingId = (_a3 = node == null ? void 0 : node.uiRecognition) == null ? void 0 : _a3.pendingId;\n    if (!current || !node || !pendingId || !options3.store.recognitionStatus) return \"released\";\n    let inProgress;\n    try {\n      const attempt = await options3.store.recognitionStatus(current.id, pendingId);\n      inProgress = attempt.status === \"running\" || attempt.status === \"unknown\" && /仍在执行/.test(attempt.error || \"\");\n    } catch {\n      return \"released\";\n    }\n    if (!inProgress) return \"released\";\n    if (!force) return \"waiting\";\n    if (options3.current() !== current || ((_b = node.uiRecognition) == null ? void 0 : _b.pendingId) !== pendingId)\n      return \"released\";\n    options3.remember();\n    delete node.uiRecognition.pendingId;\n    options3.changed();\n    let saved = false;\n    try {\n      saved = await options3.save();\n    } catch {\n      saved = false;\n    }\n    if (!saved) {\n      if (node.uiRecognition && !node.uiRecognition.pendingId)\n        node.uiRecognition.pendingId = pendingId;\n      options3.changed();\n      throw new Error(\n        \"原识图请求等待超时，但画布保存失败，未重新提交识图；请先保存画布，再继续（会先查询原请求 \" + pendingId + \"）。\"\n      );\n    }\n    return \"abandoned\";\n  }",
+          "after": "  async function recoverForRetry(nodeId, force = false) {\n    const current = options3.current();\n    const node = current?.nodes.find((item) => item.id === nodeId);\n    const pendingId = node?.uiRecognition?.pendingId;\n    if (!current || !node || !pendingId) return \"released\";\n    if (!options3.store.recognitionStatus) return \"blocked\";\n    try {\n      const attempt = await options3.store.recognitionStatus(current.id, pendingId);\n      if (options3.current() !== current || node.uiRecognition?.pendingId !== pendingId) return \"blocked\";\n      if ([\"pending\", \"running\"].includes(attempt.status)) return force ? \"blocked\" : \"waiting\";\n      return attempt.status === \"succeeded\" || attempt.status === \"failed\" && attempt.executionState === \"not_executed\" ? \"released\" : \"blocked\";\n    } catch {\n      return \"blocked\";\n    }\n  }",
+          "count": 1
+        },
+        {
+          "before": "  const autoRuns = /* @__PURE__ */ new Map();\n  const outcomes",
+          "after": "  const autoRuns = /* @__PURE__ */ new Map();\n  const stopped = /* @__PURE__ */ new Set();\n  function assertContinuing(groupId) {\n    if (stopped.has(groupId)) throw new Error(\"已停止后续；已提交的远端任务不取消，请查询原结果。\");\n  }\n  function stop(groupId) {\n    stopped.add(groupId);\n    autoRuns.delete(groupId);\n    options3.queue.stop(groupId);\n    outcomes.set(groupId, { status: \"waiting\", stage: \"paused\", message: \"已停止后续；已提交的远端任务不取消。\" });\n    options3.render();\n  }\n  const outcomes",
+          "count": 1
+        },
+        {
+          "before": "    for (let round = 0; ; round++) {\n      const found = cards(options3.current(), groupId);",
+          "after": "    for (let round = 0; ; round++) {\n      assertContinuing(groupId);\n      const found = cards(options3.current(), groupId);",
+          "count": 1
+        },
+        {
+          "before": "        await prepareOnce(found);\n        return;\n      } catch (error2) {\n        if (round >= RETRIES) throw error2;",
+          "after": "        await prepareOnce(found, groupId);\n        return;\n      } catch (error2) {\n        assertContinuing(groupId);\n        if (round >= RETRIES) throw error2;",
+          "count": 1
+        },
+        {
+          "before": "          pending3 = result === \"waiting\";\n          if (result === \"abandoned\")\n            options3.log(\n              \"015 · 原识图请求等待超过 10 分钟仍未完成，重新提交识图（可能多计一次费用）\",\n              \"warning\"\n            );\n        } else\n          for (const id of [found.input.id, found.cut.id])\n            if (options3.needs(id) || ((_c = options3.problem) == null ? void 0 : _c.call(options3, id)))\n              pending3 ||= await options3.recoverImage(id, force) === \"waiting\";",
+          "after": "          assertContinuing(groupId);\n          if (result === \"blocked\") throw new Error(\"原识图结果尚未确认，已暂停自动流程；请核对原请求，不会重新付费提交。\");\n          pending3 = result === \"waiting\";\n        } else\n          for (const id of [found.input.id, found.cut.id])\n            if (options3.needs(id) || ((_c = options3.problem) == null ? void 0 : _c.call(options3, id))) {\n              const result = await options3.recoverImage(id, force);\n              assertContinuing(groupId);\n              if (result === \"blocked\") throw new Error(\"原图片结果尚未确认或导入失败，已暂停自动流程；请核对原请求，不会重新付费提交。\");\n              pending3 = pending3 || result === \"waiting\";\n            }",
+          "count": 1
+        },
+        {
+          "before": "  async function prepareOnce(found) {\n    var _a3, _b, _c, _d;\n    if (options3.needs(found.input.id))",
+          "after": "  async function prepareOnce(found, groupId) {\n    var _a3, _b, _c, _d;\n    assertContinuing(groupId);\n    if (options3.needs(found.input.id))",
+          "count": 1
+        },
+        {
+          "before": "    const cut = found.cut;\n    if (((_b = cut.uiRecognition)",
+          "after": "    assertContinuing(groupId);\n    const cut = found.cut;\n    if (((_b = cut.uiRecognition)",
+          "count": 1
+        },
+        {
+          "before": "    if (options3.needs(cut.id) || !selectedUiRecognition(cut)) {\n      options3.log(\"015 · 去文字",
+          "after": "    assertContinuing(groupId);\n    if (options3.needs(cut.id) || !selectedUiRecognition(cut)) {\n      options3.log(\"015 · 去文字",
+          "count": 1
+        },
+        {
+          "before": "    running = groupId;\n    options3.render();\n    try {\n      let view2 = inspect(groupId);",
+          "after": "    stopped.delete(groupId);\n    running = groupId;\n    options3.render();\n    try {\n      let view2 = inspect(groupId);",
+          "count": 1
+        },
+        {
+          "before": "      const found = cards(document2, groupId);\n      const synced",
+          "after": "      assertContinuing(groupId);\n      const found = cards(document2, groupId);\n      const synced",
+          "count": 1
+        },
+        {
+          "before": "      await applyChoice(document2, groupId, choice);\n      view2 = inspect(groupId);",
+          "after": "      await applyChoice(document2, groupId, choice);\n      assertContinuing(groupId);\n      view2 = inspect(groupId);",
+          "count": 1
+        },
+        {
+          "before": "        const result = node.type === \"image\" ? await options3.recoverImage(id, run.waits >= MAX_WAITS) : \"released\";\n        if (result === \"waiting\")",
+          "after": "        const result = node.type === \"image\" ? await options3.recoverImage(id, run.waits >= MAX_WAITS) : \"released\";\n        if (autoRuns.get(groupId) !== run || stopped.has(groupId)) return;\n        if (result === \"waiting\")",
+          "count": 1
+        },
+        {
+          "before": "          options3.log(\"015 · 原图片已生成但本地导入仍失败，停止自动流程以避免重复付费\", \"error\");\n          finalResult(groupId, await assemble2(groupId, false, true, run.cli));",
+          "after": "          const message = \"原图片结果尚未确认或导入失败，已暂停自动流程；请核对原请求，不会重新付费提交。\";\n          options3.log(\"015 · \" + message, \"error\");\n          outcomes.set(groupId, { status: \"waiting\", stage: \"generation\", message });\n          options3.render();",
+          "count": 1
+        },
+        {
+          "before": "      return { stage: stage + \" · 执行中\", extra: [], hint: doing[state.stage], active: true };",
+          "after": "      return { stage: stage + \" · 执行中\", extra: [{ label: stopped.has(groupId) ? \"已停止后续，等待当前步骤结束\" : \"停止后续\", run: () => stop(groupId) }], hint: doing[state.stage], active: true };",
+          "count": 1
+        },
+        {
+          "before": "    assemble: assemble2,\n    settled,\n    isActive(groupId)",
+          "after": "    assemble: assemble2,\n    settled,\n    isStopping(groupId) {\n      return running === groupId && stopped.has(groupId);\n    },\n    isActive(groupId)",
+          "count": 1
+        },
+        {
+          "before": "      \"    queue: { start: function (id, confirmed) { return groupQueue.start(id, confirmed); }, spendRetry:",
+          "after": "      \"    queue: { stop: function (id) { groupQueue.stop(id); }, start: function (id, confirmed) { return groupQueue.start(id, confirmed); }, spendRetry:",
+          "count": 1
+        },
+        {
+          "before": "      \"    autoRunning: function (node) { return Boolean(ui015Workflow && node.sectionId && ui015Workflow.isActive(node.sectionId)); },\",",
+          "after": "      \"    autoRunning: function (node) { return Boolean(ui015Workflow && node.sectionId && ui015Workflow.isActive(node.sectionId)); },\",\n      \"    autoStopped: function (node) { return Boolean(ui015Workflow && node.sectionId && ui015Workflow.isStopping(node.sectionId)); },\",",
+          "count": 1
+        },
+        {
+          "before": "        if (!generated || !completeRecognition) return generated;\n        if (options3.current() !== current",
+          "after": "        if (options3.autoStopped?.(node)) return false;\n        if (!generated || !completeRecognition) return generated;\n        if (options3.current() !== current",
+          "count": 1
+        },
+        {
+          "before": "          attempt = await withCanvasTimeout(\n            () => options3.store.recognizeUi(current.id, input2),",
+          "after": "          if (options3.autoStopped?.(source)) throw new Error(\"已停止后续，未继续提交识图。\");\n          attempt = await withCanvasTimeout(\n            () => options3.store.recognizeUi(current.id, input2),",
+          "count": 1
+        },
+        {
+          "before": "        if (!await options3.save()) throw new Error(\"识图请求尚未保存，未提交模型。\");\n        submitted = true;",
+          "after": "        if (!await options3.save()) throw new Error(\"识图请求尚未保存，未提交模型。\");\n        if (options3.autoStopped?.(source)) throw new Error(\"已停止后续，未提交识图。\");\n        submitted = true;",
+          "count": 1
+        },
+        {
+          "before": "自动处理中：失败或结果未知的步骤会自动重试，完成后组装 UI",
+          "after": "自动处理中：仅明确未执行的请求可自动重试，结果未知时暂停",
+          "count": 2
+        },
+        {
+          "before": "正在准备识图输入、去文字并完成两轮识图；失败或结果未知会自动重试",
+          "after": "正在准备识图输入、去文字并完成两轮识图；结果未知时暂停",
+          "count": 1
+        }
+      ]
     }
   ],
   "vendorHashes": {
     "LICENSE": "3a6ed4d91c318ec454c98c8290bc02706d2f87fd922ef9944c1604cd0b718738",
     "README.md": "03e257a22915e7896ea5aaf4d5773e65908f886b23b4c709c6c5ced5b8df269d",
     "bin/taptap-maker": "d3cd496fb6cdf9606a809570de2920b7e40101939bc1cb6841f4ae7cda97c718",
-    "dist/maker.js": "a2e78bc698e140ba744b00fa651076850d384a2ed40d7bde6a0bcdd92e733a8e",
+    "dist/maker.js": "4e2d122d13db62a70893a450007b7af3d31e8bfc39854d589745af2959498735",
     "docs/MAKER_CONSOLE.md": "18fb13809150606bc7004f76e75ce26f8b2dacb33e9f4ee6c5dea69e67336c15",
     "docs/MAKER_LOCAL_PREVIEW.md": "f9023da4151f357227102a3a0e04e5b34fc93f69146f6e69f15b23134c871c75",
     "docs/MAKER_MCP_CONNECTION_TROUBLESHOOTING.md": "30905fd6a705a05f648e286972ac2bd4b946e6b6db763d8dd5160204ec4c1cba",

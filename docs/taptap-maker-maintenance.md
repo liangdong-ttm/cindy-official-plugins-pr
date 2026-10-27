@@ -18,6 +18,9 @@ matching guidance and regressions. V9 preserves unknown cloud-commit outcomes an
 recovery guidance and recognizes both cloud-blocking messages. It adds no Git
 implementation or retry layer. Ordinary Git and Cindy savepoints continue sharing
 the native repository; see the PR for the actual runtime verification scope.
+V10 retains uncertain canvas requests and recognition pending IDs, pauses recovery
+at its wait limit, and extends the 015 stop control to preparation and recovery
+waits. Late replies after stopping must not start subsequent requests.
 
 ### 2.1.19: validation arguments and evidence boundaries
 

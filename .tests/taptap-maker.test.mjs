@@ -3140,3 +3140,153 @@ test('新旧云端工作区阻塞消息均进入同一 Runtime 恢复流程', ()
   }
   assert.equal(context.classifyGitFailure('non-fast-forward'), 'remote_rejected');
 });
+
+
+test('画布自动恢复只释放明确未执行的生图，等待超限保留原请求', async () => {
+  const source = makerBundleFunction('createCanvasGenerationUiWithHost');
+  for (const status of ['pending', 'running', 'unknown', 'canceled', 'failed']) {
+    for (const executionState of ['unknown', 'executed', 'not_executed', undefined]) {
+      for (const force of [false, true]) {
+        const attempt = { id: 'attempt', canvasId: 'canvas', targetNodeId: 'image', kind: 'image',
+          createdAt: '2026-10-27T00:00:00Z', status, executionState };
+        const document = { id: 'canvas', nodes: [{ id: 'image', type: 'image' }], edges: [] };
+        const context = createContext({});
+        new Script(source).runInContext(context);
+        const ui = context.createCanvasGenerationUiWithHost({
+          getDocument: () => document, videoPrompts: {}, render() {},
+          store: { listGeneration: async () => [attempt] },
+        });
+        const result = await ui.recoverForRetry('image', force);
+        const explicit = status === 'failed' && executionState === 'not_executed';
+        const live = ['pending', 'running'].includes(status);
+        assert.equal(result, explicit ? 'released' : live && !force ? 'waiting' : 'blocked',
+          [status, executionState, force].join('/'));
+        if (['pending', 'running', 'unknown', 'canceled'].includes(status))
+          assert.equal(ui.hasUnsettledResult('image'), true);
+      }
+    }
+  }
+});
+
+test('识图恢复不因超限、未知或查询失败删除原 pendingId', async () => {
+  for (const status of ['pending', 'running', 'unknown', 'failed', 'succeeded', 'lookup-failed']) {
+    for (const force of [false, true]) {
+      const context = createContext({});
+      new Script(makerBundleFunction('createUiRecognitionUiWithHost')).runInContext(context);
+      const node = { id: 'cut', uiRecognition: { pendingId: 'original-request' } };
+      const document = { id: 'canvas', nodes: [node] };
+      const ui = context.createUiRecognitionUiWithHost({ current: () => document, store: {
+        recognitionStatus: async () => {
+          if (status === 'lookup-failed') throw new Error('disconnected');
+          return { status, executionState: 'unknown' };
+        },
+      } });
+      assert.equal(await ui.recoverForRetry('cut', force), status === 'succeeded' ? 'released'
+        : ['pending', 'running'].includes(status) && !force ? 'waiting' : 'blocked');
+      assert.equal(node.uiRecognition.pendingId, 'original-request');
+    }
+  }
+});
+
+function canvasWorkflowHarness({ preparing = false, runImage, recoverImage } = {}) {
+  const tasks = [];
+  const calls = [];
+  const nodes = [
+    { id: 'group', type: 'section', templateId: '7e1cb6ad-732f-4dc3-a951-000000000015' },
+    { id: 'design', type: 'image', assetPath: 'assets/design.png' },
+    { id: 'input', type: 'image', sectionId: 'group', uiRecognition: { inputRole: 'design' } },
+    { id: 'cut', type: 'image', sectionId: 'group', uiRecognition: { inputRole: 'text-free' } },
+    { id: 'bundle', type: 'resource-bundle', sectionId: 'group' },
+    { id: 'image', type: 'image', sectionId: 'group' },
+  ];
+  const document = { id: 'canvas', nodes, edges: [] };
+  const queue = { phase: 'paused', failures: { image: 'failed' }, retries: {} };
+  const context = createContext({
+    structuredClone, setTimeout: fn => { tasks.push(fn); },
+    canvasReferences: () => [nodes[1]],
+    selectedUiRecognition: () => preparing ? undefined : { bbox: { texts: [], elements: [] } },
+  });
+  new Script(makerBundleFunction('createUi015Workflow')).runInContext(context);
+  const workflow = context.createUi015Workflow({
+    current: () => document, store: {}, needs: id => preparing && id === 'input',
+    runImage: async id => { calls.push('image:' + id); return runImage ? runImage(id) : false; },
+    recoverImage: recoverImage || (async () => 'blocked'),
+    queue: {
+      view: () => queue, remaining: () => 1,
+      start: () => { calls.push('start'); return true; },
+      stop: () => { calls.push('stop'); },
+      spendRetry: () => { calls.push('retry'); return 1; },
+    },
+    sync: () => [], save: async () => true, remember() {}, changed() {}, render() {}, log() {}, error() {},
+  });
+  return { workflow, calls, tasks };
+}
+
+test('015 准备阶段未知结果暂停；停止后不进入下一张卡或队列', async () => {
+  const blocked = canvasWorkflowHarness({ preparing: true });
+  const result = await blocked.workflow.advance('group');
+  assert.equal(result.status, 'failed');
+  assert.match(result.message, /暂停/);
+  assert.deepEqual(blocked.calls, ['image:input']);
+  assert.equal(blocked.tasks.length, 0);
+
+  let finish;
+  const waiting = canvasWorkflowHarness({ preparing: true,
+    runImage: () => new Promise(resolve => { finish = resolve; }) });
+  const pending = waiting.workflow.advance('group');
+  const stop = waiting.workflow.view('group').extra.find(action => action.label === '停止后续');
+  assert.ok(stop);
+  stop.run();
+  finish(true);
+  await pending;
+  assert.deepEqual(waiting.calls, ['image:input', 'stop']);
+  assert.equal(waiting.workflow.active, false);
+});
+
+test('015 队列恢复期间停止后，迟到回包不再次启动队列', async () => {
+  let finish;
+  const harness = canvasWorkflowHarness({
+    recoverImage: () => new Promise(resolve => { finish = resolve; }),
+  });
+  assert.equal((await harness.workflow.advance('group')).status, 'started');
+  harness.workflow.settled('group', 'paused');
+  harness.tasks.shift()();
+  const stop = harness.workflow.view('group').extra.find(action => action.label === '停止后续');
+  assert.ok(stop);
+  stop.run();
+  finish('released');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(harness.calls, ['start', 'stop']);
+  assert.equal(harness.workflow.active, false);
+});
+
+test('015 生成队列遇到未知结果不花费重试次数或再次提交', async () => {
+  const harness = canvasWorkflowHarness();
+  await harness.workflow.advance('group');
+  harness.workflow.settled('group', 'paused');
+  harness.tasks.shift()();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(harness.calls, ['start']);
+  assert.equal(harness.workflow.outcome('group').status, 'waiting');
+  assert.equal(harness.workflow.active, false);
+});
+
+test('015 明确未执行或已取回结果仍可继续原有队列', async () => {
+  for (const result of ['released', 'recovered']) {
+    const harness = canvasWorkflowHarness({ recoverImage: async () => result });
+    await harness.workflow.advance('group');
+    harness.workflow.settled('group', 'paused');
+    harness.tasks.shift()();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(harness.calls, ['start', 'retry', 'start']);
+  }
+});
+
+test('停止去文字后不再启动卡片内的识图请求', async () => {
+  const context = createContext({ selectedUiRecognition: () => undefined });
+  new Script(makerBundleFunction('createUiRecognitionUiWithHost')).runInContext(context);
+  const node = { id: 'cut', templatePending: true, uiRecognition: { enabled: true, inputRole: 'text-free' } };
+  const current = { nodes: [node] };
+  const ui = context.createUiRecognitionUiWithHost({ current: () => current, autoStopped: () => true });
+  assert.equal(await ui.runImage('cut', async () => true, true, true), false);
+});

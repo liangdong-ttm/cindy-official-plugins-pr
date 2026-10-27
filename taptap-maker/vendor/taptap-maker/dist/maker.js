@@ -119268,11 +119268,8 @@ function createCanvasGenerationUiWithHost(options3) {
       if ((attempt == null ? void 0 : attempt.kind) === "video" && attempt.taskId) await action(attempt, "query", throwOnError);
     },
     /**
-     * Automatic recovery for an unattended run: query the card's original task first and keep
-     * a result that did arrive. A task the server still reports as pending/running is left
-     * alone ('waiting') unless force is set, so it cannot be charged twice. Otherwise abandon
-     * its unknown or failed attempts so the next run of the card submits again. Nothing is
-     * submitted here.
+     * Recover original results; release only explicitly unexecuted requests for retry.
+     * A wait limit pauses recovery without discarding uncertain paid requests.
      */
     async recoverForRetry(nodeId, force = false) {
       const documentState = options3.getDocument();
@@ -119308,9 +119305,12 @@ function createCanvasGenerationUiWithHost(options3) {
         return "recovered";
       }
       const live = (attempt) => attempt.canvasId === documentState.id && attempt.targetNodeId === nodeId && !abandonedAttempts.has(attempt.id) && ["pending", "running"].includes(attempt.status);
-      if (!force && [...attempts.values()].some(live)) return "waiting";
+      if ([...attempts.values()].some(live)) return force ? "blocked" : "waiting";
+      if (unconfirmedImages.has(documentState.id + ":" + nodeId) || [...attempts.values()].some(
+        (attempt) => attempt.canvasId === documentState.id && attempt.targetNodeId === nodeId && !abandonedAttempts.has(attempt.id) && ["unknown", "canceled", "failed"].includes(attempt.status) && !explicitPreExecutionRejection(attempt)
+      )) return "blocked";
       for (const attempt of attempts.values())
-        if (attempt.canvasId === documentState.id && attempt.targetNodeId === nodeId && ["pending", "running", "unknown", "canceled", "failed"].includes(attempt.status))
+        if (attempt.canvasId === documentState.id && attempt.targetNodeId === nodeId && explicitPreExecutionRejection(attempt))
           abandonedAttempts.add(attempt.id);
       unconfirmedImages.delete(documentState.id + ":" + nodeId);
       imageFailures.delete(nodeId);
@@ -119534,6 +119534,7 @@ function createUiRecognitionUiWithHost(options3) {
             allowPaid: true,
             recover: true
           };
+          if (options3.autoStopped?.(source)) throw new Error("已停止后续，未继续提交识图。");
           attempt = await withCanvasTimeout(
             () => options3.store.recognizeUi(current.id, input2),
             375e3
@@ -119551,6 +119552,7 @@ function createUiRecognitionUiWithHost(options3) {
         pendingCreated = true;
         options3.changed();
         if (!await options3.save()) throw new Error("识图请求尚未保存，未提交模型。");
+        if (options3.autoStopped?.(source)) throw new Error("已停止后续，未提交识图。");
         submitted = true;
         attempt = await withCanvasTimeout(
           () => options3.store.recognizeUi(current.id, {
@@ -119629,6 +119631,7 @@ function createUiRecognitionUiWithHost(options3) {
     if (((_a3 = node.uiRecognition) == null ? void 0 : _a3.enabled) && node.uiRecognition.inputRole !== "design") {
       if (node.templatePending || !node.assetPath) {
         const generated = await fallback();
+        if (options3.autoStopped?.(node)) return false;
         if (!generated || !completeRecognition) return generated;
         if (options3.current() !== current || node.templatePending || !node.assetPath) return false;
       }
@@ -119870,40 +119873,19 @@ function createUiRecognitionUiWithHost(options3) {
     }
   }
   async function recoverForRetry(nodeId, force = false) {
-    var _a3, _b;
     const current = options3.current();
-    const node = current == null ? void 0 : current.nodes.find((item) => item.id === nodeId);
-    const pendingId = (_a3 = node == null ? void 0 : node.uiRecognition) == null ? void 0 : _a3.pendingId;
-    if (!current || !node || !pendingId || !options3.store.recognitionStatus) return "released";
-    let inProgress;
+    const node = current?.nodes.find((item) => item.id === nodeId);
+    const pendingId = node?.uiRecognition?.pendingId;
+    if (!current || !node || !pendingId) return "released";
+    if (!options3.store.recognitionStatus) return "blocked";
     try {
       const attempt = await options3.store.recognitionStatus(current.id, pendingId);
-      inProgress = attempt.status === "running" || attempt.status === "unknown" && /仍在执行/.test(attempt.error || "");
+      if (options3.current() !== current || node.uiRecognition?.pendingId !== pendingId) return "blocked";
+      if (["pending", "running"].includes(attempt.status)) return force ? "blocked" : "waiting";
+      return attempt.status === "succeeded" || attempt.status === "failed" && attempt.executionState === "not_executed" ? "released" : "blocked";
     } catch {
-      return "released";
+      return "blocked";
     }
-    if (!inProgress) return "released";
-    if (!force) return "waiting";
-    if (options3.current() !== current || ((_b = node.uiRecognition) == null ? void 0 : _b.pendingId) !== pendingId)
-      return "released";
-    options3.remember();
-    delete node.uiRecognition.pendingId;
-    options3.changed();
-    let saved = false;
-    try {
-      saved = await options3.save();
-    } catch {
-      saved = false;
-    }
-    if (!saved) {
-      if (node.uiRecognition && !node.uiRecognition.pendingId)
-        node.uiRecognition.pendingId = pendingId;
-      options3.changed();
-      throw new Error(
-        "原识图请求等待超时，但画布保存失败，未重新提交识图；请先保存画布，再继续（会先查询原请求 " + pendingId + "）。"
-      );
-    }
-    return "abandoned";
   }
   return {
     ensureNote,
@@ -123393,6 +123375,17 @@ function createUi015Workflow(options3) {
   let running = "";
   const deliveries = /* @__PURE__ */ new Map();
   const autoRuns = /* @__PURE__ */ new Map();
+  const stopped = /* @__PURE__ */ new Set();
+  function assertContinuing(groupId) {
+    if (stopped.has(groupId)) throw new Error("已停止后续；已提交的远端任务不取消，请查询原结果。");
+  }
+  function stop(groupId) {
+    stopped.add(groupId);
+    autoRuns.delete(groupId);
+    options3.queue.stop(groupId);
+    outcomes.set(groupId, { status: "waiting", stage: "paused", message: "已停止后续；已提交的远端任务不取消。" });
+    options3.render();
+  }
   const outcomes = /* @__PURE__ */ new Map();
   const MAX_WAITS = 20;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -123537,7 +123530,7 @@ function createUi015Workflow(options3) {
     if (options3.queue.remaining(groupId) > 0)
       return {
         stage: "generation",
-        message: autoRuns.has(groupId) ? "自动处理中：失败或结果未知的步骤会自动重试，完成后组装 UI" : (queue == null ? void 0 : queue.phase) === "paused" ? "已暂停：点击继续，先核对原任务，再自动完成剩余步骤并组装 UI" : "下一步：预排、分离生图与切图，完成后自动组装 UI"
+        message: autoRuns.has(groupId) ? "自动处理中：仅明确未执行的请求可自动重试，结果未知时暂停" : (queue == null ? void 0 : queue.phase) === "paused" ? "已暂停：点击继续，先核对原任务，再自动完成剩余步骤并组装 UI" : "下一步：预排、分离生图与切图，完成后自动组装 UI"
       };
     const pending3 = assetsAwaitingReview(document2, list);
     const status = delivery(document2, groupId, list);
@@ -123553,12 +123546,14 @@ function createUi015Workflow(options3) {
     var _a3, _b, _c;
     let waits = 0;
     for (let round = 0; ; round++) {
+      assertContinuing(groupId);
       const found = cards(options3.current(), groupId);
       if (!found) throw new Error("015 分组结构已变化，请检查连线。");
       try {
-        await prepareOnce(found);
+        await prepareOnce(found, groupId);
         return;
       } catch (error2) {
+        assertContinuing(groupId);
         if (round >= RETRIES) throw error2;
         const message = error2 instanceof Error ? error2.message : String(error2);
         options3.log(
@@ -123570,16 +123565,17 @@ function createUi015Workflow(options3) {
         const cut = (_a3 = options3.current()) == null ? void 0 : _a3.nodes.find((node) => node.id === found.cut.id);
         if ((_b = cut == null ? void 0 : cut.uiRecognition) == null ? void 0 : _b.pendingId) {
           const result = await options3.recoverRecognition(cut.id, force);
+          assertContinuing(groupId);
+          if (result === "blocked") throw new Error("原识图结果尚未确认，已暂停自动流程；请核对原请求，不会重新付费提交。");
           pending3 = result === "waiting";
-          if (result === "abandoned")
-            options3.log(
-              "015 · 原识图请求等待超过 10 分钟仍未完成，重新提交识图（可能多计一次费用）",
-              "warning"
-            );
         } else
           for (const id of [found.input.id, found.cut.id])
-            if (options3.needs(id) || ((_c = options3.problem) == null ? void 0 : _c.call(options3, id)))
-              pending3 ||= await options3.recoverImage(id, force) === "waiting";
+            if (options3.needs(id) || ((_c = options3.problem) == null ? void 0 : _c.call(options3, id))) {
+              const result = await options3.recoverImage(id, force);
+              assertContinuing(groupId);
+              if (result === "blocked") throw new Error("原图片结果尚未确认或导入失败，已暂停自动流程；请核对原请求，不会重新付费提交。");
+              pending3 = pending3 || result === "waiting";
+            }
         if (pending3) {
           waits++;
           round--;
@@ -123588,19 +123584,22 @@ function createUi015Workflow(options3) {
       }
     }
   }
-  async function prepareOnce(found) {
+  async function prepareOnce(found, groupId) {
     var _a3, _b, _c, _d;
+    assertContinuing(groupId);
     if (options3.needs(found.input.id)) {
       options3.log("015 · 准备识图输入");
       if (!await options3.runImage(found.input.id))
         throw new Error(((_a3 = options3.failure) == null ? void 0 : _a3.call(options3)) || "原稿与识图输入尚未准备完成。");
     }
+    assertContinuing(groupId);
     const cut = found.cut;
     if (((_b = cut.uiRecognition) == null ? void 0 : _b.pendingId) && cut.assetPath && !cut.templatePending) {
       options3.log("015 · 继续原识图请求（复用原请求编号）");
       if (!await options3.recognize(cut.id, true))
         throw new Error(((_c = options3.failure) == null ? void 0 : _c.call(options3)) || "原识图请求仍未完成，请稍后再继续。");
     }
+    assertContinuing(groupId);
     if (options3.needs(cut.id) || !selectedUiRecognition(cut)) {
       options3.log("015 · 去文字与两轮识图（Server API）");
       if (!await options3.runImage(cut.id))
@@ -123636,6 +123635,7 @@ function createUi015Workflow(options3) {
     const document2 = options3.current();
     if (!document2 || !group(document2, groupId))
       return { status: "failed", stage: "invalid", message: "请选择 015 Bbox 模板分组。" };
+    stopped.delete(groupId);
     running = groupId;
     options3.render();
     try {
@@ -123652,6 +123652,7 @@ function createUi015Workflow(options3) {
         await prepare(groupId);
         view2 = inspect(groupId);
       }
+      assertContinuing(groupId);
       const found = cards(document2, groupId);
       const synced = Boolean(bundleOf(members(document2, groupId)));
       const derived = synced ? currentChoice(document2, members(document2, groupId), found.cut) : defaultChoice(found.cut);
@@ -123660,6 +123661,7 @@ function createUi015Workflow(options3) {
         background: input2.background ?? derived.background
       };
       await applyChoice(document2, groupId, choice);
+      assertContinuing(groupId);
       view2 = inspect(groupId);
       outcomes.delete(groupId);
       if (view2.stage === "generation") {
@@ -123737,6 +123739,7 @@ function createUi015Workflow(options3) {
       for (const id of failed) {
         const node = document_.nodes.find((item) => item.id === id);
         const result = node.type === "image" ? await options3.recoverImage(id, run.waits >= MAX_WAITS) : "released";
+        if (autoRuns.get(groupId) !== run || stopped.has(groupId)) return;
         if (result === "waiting") {
           run.waits++;
           options3.log("015 · 「" + node.title + "」原任务仍在执行，30 秒后再查询", "info");
@@ -123745,8 +123748,10 @@ function createUi015Workflow(options3) {
         }
         if (result === "blocked") {
           autoRuns.delete(groupId);
-          options3.log("015 · 原图片已生成但本地导入仍失败，停止自动流程以避免重复付费", "error");
-          finalResult(groupId, await assemble2(groupId, false, true, run.cli));
+          const message = "原图片结果尚未确认或导入失败，已暂停自动流程；请核对原请求，不会重新付费提交。";
+          options3.log("015 · " + message, "error");
+          outcomes.set(groupId, { status: "waiting", stage: "generation", message });
+          options3.render();
           return;
         }
         const count = options3.queue.spendRetry(groupId, id);
@@ -123973,12 +123978,12 @@ function createUi015Workflow(options3) {
     const stage = labels[state.stage] || state.stage;
     if ((autoRuns.has(groupId) || running === groupId) && state.stage !== "running") {
       const doing = {
-        prepare: "正在准备识图输入、去文字并完成两轮识图；失败或结果未知会自动重试",
+        prepare: "正在准备识图输入、去文字并完成两轮识图；结果未知时暂停",
         choice: "识图完成，正在按默认选择拆分批次",
-        generation: "自动处理中：失败或结果未知的步骤会自动重试，完成后组装 UI",
+        generation: "自动处理中：仅明确未执行的请求可自动重试，结果未知时暂停",
         assemble: "正在组装 UI"
       };
-      return { stage: stage + " · 执行中", extra: [], hint: doing[state.stage], active: true };
+      return { stage: stage + " · 执行中", extra: [{ label: stopped.has(groupId) ? "已停止后续，等待当前步骤结束" : "停止后续", run: () => stop(groupId) }], hint: doing[state.stage], active: true };
     }
     switch (state.stage) {
       case "invalid":
@@ -124034,6 +124039,9 @@ function createUi015Workflow(options3) {
     advance,
     assemble: assemble2,
     settled,
+    isStopping(groupId) {
+      return running === groupId && stopped.has(groupId);
+    },
     isActive(groupId) {
       return autoRuns.has(groupId) || running === groupId;
     },
@@ -126032,6 +126040,7 @@ function getCanvasPageHtml(integration) {
       "  uiRecognitionUi = createUiRecognitionUi({ current: function () { return documentState; }, store: store, save: flush, remember: remember, changed: markDirty, render: render, error: setError, loadMedia: loadMedia,",
       "    blocked: function () { return Boolean(groupQueue && groupQueue.isBusy) || generationUi.isBusy || sequenceUi.isBusy || pendingAssetImports > 0; },",
       "    autoRunning: function (node) { return Boolean(ui015Workflow && node.sectionId && ui015Workflow.isActive(node.sectionId)); },",
+      "    autoStopped: function (node) { return Boolean(ui015Workflow && node.sectionId && ui015Workflow.isStopping(node.sectionId)); },",
       '    focus: function (id) { const node = documentState.nodes.find(function (item) { return item.id === id; }); if (!node) return; const view = documentState.viewport; view.x = board.clientWidth / 2 - (node.x + node.width / 2) * view.scale; view.y = board.clientHeight / 2 - (node.y + node.height / 2) * view.scale; selected.clear(); selected.add(id); selectionAction = ""; markDirty(); render(); },',
       '    openCanvas: async function (id) { const saved = await store.load(id); const option = document.createElement("option"); option.value = id; option.textContent = saved.title; select.append(option); await openDocument(id); },',
       "  });",
@@ -126042,7 +126051,7 @@ function getCanvasPageHtml(integration) {
       "    recoverImage: function (id, force) { return generationUi.recoverForRetry(id, force); },",
       "    recoverRecognition: function (id, force) { return uiRecognitionUi.recoverForRetry(id, force); },",
       "    chooseDesign: requestImageImport, sync: syncUiBboxWorkflow,",
-      "    queue: { start: function (id, confirmed) { return groupQueue.start(id, confirmed); }, spendRetry: function (id, nodeId) { return groupQueue.spendRetry(id, nodeId); }, view: function (id) { return groupQueue.view(id); }, remaining: function (id) { return groupQueue.remaining(id); } },",
+      "    queue: { stop: function (id) { groupQueue.stop(id); }, start: function (id, confirmed) { return groupQueue.start(id, confirmed); }, spendRetry: function (id, nodeId) { return groupQueue.spendRetry(id, nodeId); }, view: function (id) { return groupQueue.view(id); }, remaining: function (id) { return groupQueue.remaining(id); } },",
       '    focus: function (id) { const node = documentState && documentState.nodes.find(function (item) { return item.id === id; }); if (!node) return; const view = documentState.viewport; view.x = board.clientWidth / 2 - (node.x + node.width / 2) * view.scale; view.y = board.clientHeight / 2 - (node.y + (node.height || 200) / 2) * view.scale; selected.clear(); selected.add(id); selectionAction = ""; render(); },',
       '    log: function (message, level) { canvasLogs.add(message, level || "info"); }, failure: function () { return error.textContent; },',
       "    remember: remember, save: flush, changed: markDirty, render: render, error: setError, blocked: peerBlock",

@@ -451,6 +451,9 @@ compatibility patches until the official package includes equivalent fixes:
 - Preserve unknown cloud Git commit outcomes when verification fails, suppress
   blind retry guidance, recognize both cloud-blocking messages, and distinguish
   completed cloud commits from unfinished local steps.
+- Keep uncertain canvas requests protected from automatic resubmission; waiting
+  limits pause the 015 workflow, whose stop control also covers preparation and
+  recovery waits without cancelling submitted remote tasks.
 
 Apart from these patches and the retained `LICENSE`, vendor files must match the
 official npm package. Recheck the patch list and regression tests on every upgrade;
