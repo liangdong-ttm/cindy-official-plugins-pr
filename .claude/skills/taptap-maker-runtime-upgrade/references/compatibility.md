@@ -17,7 +17,7 @@
 | V3 / 2a80b28 | startMakerMcpServer 中列表、资源读取、调用按请求 resolveMakerMcpAccessState，不缓存启动期 promise。 | 检查三个入口，而非只 tools/call；同实例换 PAT/限制状态的下一次请求重新判定；鉴权请求失败不擅自当 BLACKLISTED。现有“不缓存黑名单”是 S，“仅在明确 BLACKLISTED”是 F，真实热切换仍需 D。 |
 | V4 / d54ef28、c0e3c5b、6c4f223、78e795b、da7f978、a352bde、2259e38 | 受限 tools/list 返回固定工具和 _meta.maker_access；main.js listMakerTools/handleTool 返回账号原因而非“工具不存在”。 | 列表和调用前 list 都短路，reason/message 脱敏，not_executed/automatic_retry:false；普通不存在工具也明确未发送；四语言及 Manual 表述一致。F + 宿主模拟/S；不为显示更多工具解除账号限制。 |
 | V5 / a506b40、6c4f223 | assertSafeUserSkillRoots 在 pull 下载前、installUserSkills、installUserSkillsForClients 写前调用。 | .installer/skills、.codex/skills、.cursor/skills、.workbuddy/skills 每级祖先已有 symlink 时拒绝；正常目录仍可用。确认路径/fs/exists 打包别名正确，测试运行新包实际函数。F/本地文件测试不能宣称解决所有 TOCTOU 或任意祖先路径风险。 |
-| V6 / e4e5f63、aec91dd、891868e；0.0.37 增量 | 通用不可逆请求不重放，MAC 失效仅明确 not_executed 可重试一次。 | 检查 callRemoteProxyTool、manager/direct transport、proxy pending queue、重连和外层重试，不能只查 confirm_character_voice。初始化前失败与派发后断线分别测；executed/unknown/缺状态/冲突不自动重试；第二次失败不得第三次发出。测试“MAC 失效只重试明确未执行”；F，真实故障/扣费需授权后 D。a3d295d 原 diff 仍缺失。 |
+| V6 / e4e5f63、aec91dd、891868e；0.0.37 增量 | 通用不可逆请求不重放，MAC 失效仅明确 not_executed 可重试一次。 | 检查 callRemoteProxyTool、manager/direct transport、proxy pending queue、重连和外层重试，不能只查 confirm_character_voice。初始化前失败与派发后断线分别测；executed/unknown/缺状态/冲突不自动重试；第二次失败不得第三次发出。测试“MAC 失效只重试明确未执行”；F，真实故障/扣费需授权后 D。a3d295d 原 diff 已于 2026-10-27 补核，特定音色保护由通用契约承接。 |
 | V7 / c58a81a；0.0.37 增量 | Console 实例身份包含版本、分发来源、入口路径。 | 同版本 standalone、同版本另一插件目录不能被当当前 Cindy 服务复用；正确同入口仍可复用。检查身份生成与 health 验证两端，不只改文件名。测试“不会复用同版本”；F/N，跨会话并发和停服所有权需 D。 |
 | V8 / 0.0.37 用户确认的最小策略 | cindy_plugin 下 getConsoleHtml 无模型设置入口、readModelSettings 返回空配置；configured/resolvedUiVisionModels 固定 Server；写 models/ui-vision API 拒绝。 | 页面加载没有残留按钮空引用；GET 不露自定义密钥，非 GET 不写配置，Server 不可用明确 503；不降级 chatgpt-web，standalone 分支原行为不变。测试“识图固定 Server”，加隔离 HOME 真实 HTTP 冒烟。没有旧配置迁移、生成桥接或素材开关跨进程接管。 |
 
@@ -77,4 +77,14 @@
 - 系统 Node 隔离 HOME console 启动/health/HTML/关闭已做；无模型设置入口、server-only 配置、写设置 API 403、托管更新禁用已核对。未使用真实 PAT，也未调用付费生成。
 - 新增编码 UI 资源已与上游 tag 对照；没有为审查而执行编码内容。许可证已更新；实际打包不等于已安装。
 - **仍需 D**：正式/Beta Cindy 安装当前包；真实 PAT 切换与受限账号；真实克隆/构建/付费调用故障恢复；生产日志 watcher；Console 跨会话停服所有权；UrhoX 原生画面与交互。静态或模拟通过不消除这些缺口。
-- **历史证据缺口**：a3d295d 的完整 hash/原 diff 未获取，见 history.md。若取回后有新保护，新增矩阵条目并补适配，不将其默认为 V1/V6 的重复。
+- **历史证据补核**：2026-10-27 已取得 a3d295da1729939b77ca0827b2d94b40aa51ae9f 原 diff，其音色 isError 未知态与不重放要求由 V1/V6/T2/T3 承接，见 history.md。
+
+## 0.0.39 增量验收（2026-10-27）
+
+| ID / 来源 | 保留行为与本轮证据 | 结论与缺口 |
+| --- | --- | --- |
+| L1 / 435abb3、c2d4e11、00aa15e、9481d24、757f486 | local-validation.cjs 保留参数、证据忽略、路径隔离、所有轮次归档和大报告；13 项专项测试通过。Runtime preview validate 主实现未变化。 | 保留，F/本地 Git；未做新包真实游戏截图 D。 |
+| U1/M3 / 0f88218 | 预览开关、设置超时、失败保留构建链接和不重复构建；现有专项回归保留。 | 保留，宿主模拟；未做新包右侧预览 D。 |
+| V1–V8/H1–H6/A1–A4/M1–M3 | 新配方完整性检查通过；系统 Node 控制台由插件适配器启动，health/页面/Server-only/拒绝配置写入/关闭通过。 | 原兼容保护保留；N 不替代 D。 |
+| T6 / 577da80、64dbb6c | 新官方包允许分叉自动合并及云端自动提交，与旧分叉停止测试及云端恢复指引冲突。 | 待用户确定行为；保留失败断言，不能宣称可发布。 |
+| H6/工具超时 / 本次 main.js | 所有动态工具窗口 120 秒、独立进度 token、maxTotalMs 900000；短请求仍 30 秒。 | 参数回归不等于真实长生图验收；无进度仍可能 120 秒超时。 |

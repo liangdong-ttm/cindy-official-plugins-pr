@@ -161,6 +161,19 @@ function callImage(harness, name = 'generate_image') {
   });
 }
 
+test('所有动态工具共用 120 秒请求窗口并保留独立进度 token', async () => {
+  const harness = createMainHarness(imageNodeResponder);
+  for (const name of [...imageToolNames, ...videoToolNames, ...audioToolNames, 'query_video_task']) {
+    assert.equal((await callImage(harness, name)).ok, true);
+  }
+  const calls = harness.nodeRequests.filter((request) => request.method === 'tools/call');
+  assert.equal(new Set(calls.map((request) => request.params._meta.progressToken)).size, calls.length);
+  for (const request of harness.nodeRequests) {
+    assert.equal(request.timeoutMs, 120_000);
+    if (request.method === 'tools/call') assert.equal(request.maxTotalMs, 900_000);
+  }
+});
+
 test('生图默认开启或显式开启时保持原请求和结果', async () => {
   for (const preferences of [{}, { makerImageEnabled: true }]) {
     for (const name of imageToolNames) {
@@ -619,7 +632,7 @@ test('account commands retain their existing output limit', async () => {
 test('manifest、手动安装策略和官方 Runtime 版本保持一致', () => {
   assert.equal(manifest.id, 'taptap-maker');
   assert.equal(manifest.author, 'Cindy');
-  assert.equal(manifest.version, '2.1.24');
+  assert.equal(manifest.version, '2.1.25');
   assert.equal(manifest.minCindyVersion, '0.1.64');
   assert.match(
     manifest.tools.find((tool) => tool.name === 'maker_build').description,
@@ -666,7 +679,7 @@ test('manifest、手动安装策略和官方 Runtime 版本保持一致', () => 
   assert.match(consoleTool.description, /不自动构建、提交或安装游戏运行环境/);
   assert.deepEqual(provisioning.ghosts['taptap-maker'], { audience: { emails: [] } });
   assert.equal(vendorPackage.name, '@taptap/maker');
-  assert.equal(vendorPackage.version, '0.0.37');
+  assert.equal(vendorPackage.version, '0.0.39');
   assert.match(makerMcpSource, /TAPTAP_MAKER_DISTRIBUTION = 'cindy_plugin'/);
   assert.match(makerChildSource, /TAPTAP_MAKER_DISTRIBUTION = 'cindy_plugin'/);
   const statusTool = manifest.tools.find((tool) => tool.name === 'maker_status');
@@ -955,7 +968,7 @@ test('Runtime 仅在落后远端时快进，冲突或不安全状态在提交前
         status: status === 'conflict' ? 'needs_pull' : status,
         branch: 'main', remoteRef: 'origin/main', nextAction: 'Check remote state',
       }),
-      runGit: async (args) => {
+      gitStep: async (args) => {
         calls.push(Array.from(args));
         if (status === 'conflict') throw new Error('would be overwritten');
       },
@@ -1038,7 +1051,7 @@ test('Cindy 控制台不会复用同版本的独立 Runtime 或其他插件入�
     CONSOLE_PROTOCOL_VERSION: 3, process: { env: environment },
   });
   new Script(match[0]).runInContext(context);
-  const identity = (entry) => context.createConsoleLauncherIdentity('0.0.37', { entry, mtimeMs: 1 });
+  const identity = (entry) => context.createConsoleLauncherIdentity('0.0.39', { entry, mtimeMs: 1 });
   const standalone = identity('/example/standalone/maker.js');
   environment.TAPTAP_MAKER_DISTRIBUTION = 'cindy_plugin';
   assert.notEqual(identity('/example/standalone/maker.js'), standalone);
@@ -1046,7 +1059,7 @@ test('Cindy 控制台不会复用同版本的独立 Runtime 或其他插件入�
   assert.equal(identity('/example/plugin-a/maker.js'), identity('/example/plugin-a/maker.js'));
 });
 
-test('Cindy 识图固定 Server，服务不可用时报错且独立 Maker 保留原回退', async () => {
+test('Cindy 识图固定 Server，服务不可用时报错且独立 Maker 不恢复已移除的回退', async () => {
   const names = ['emptyModelSettings', 'readModelSettings', 'configuredUiVisionModels',
     'resolvedUiVisionModels', 'resolvedModelSettingsForDisplay'];
   const source = names.map((name) => {
@@ -1072,8 +1085,8 @@ test('Cindy 识图固定 Server，服务不可用时报错且独立 Maker 保留
   await assert.rejects(context.resolvedUiVisionModels(), /Server 识图暂不可用/);
   assert.equal((await context.resolvedModelSettingsForDisplay()).vision.source, 'server');
   environment.TAPTAP_MAKER_DISTRIBUTION = 'standalone';
-  assert.equal((await context.resolvedUiVisionModels())[0].source, 'chatgpt-web');
-  assert.equal((await context.resolvedModelSettingsForDisplay()).vision.source, 'chatgpt-web');
+  assert.equal((await context.resolvedUiVisionModels())[0].source, 'server');
+  assert.equal((await context.resolvedModelSettingsForDisplay()).vision.source, 'server');
 });
 
 test('maker_console 只打开已校验的 loopback 控制台地址', async () => {
@@ -1291,6 +1304,8 @@ test('主工具只使用宿主注入的本地 workdir，并为长构建开启续
     },
   });
   assert.equal(init.ok, true);
+  assert.equal(harness.nodeRequests[0].timeoutMs, 120_000);
+  assert.equal(harness.nodeRequests[0].maxTotalMs, 900_000);
   assert.equal(
     harness.nodeRequests[0].params.arguments.workdir,
     '/tmp/trusted-maker',
@@ -1304,7 +1319,7 @@ test('主工具只使用宿主注入的本地 workdir，并为长构建开启续
     },
   });
   assert.equal(build.ok, true);
-  assert.equal(harness.nodeRequests[1].timeoutMs, 60_000);
+  assert.equal(harness.nodeRequests[1].timeoutMs, 120_000);
   assert.equal(harness.nodeRequests[1].maxTotalMs, 900_000);
   assert.match(
     harness.nodeRequests[1].params._meta.progressToken,

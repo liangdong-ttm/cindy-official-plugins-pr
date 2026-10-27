@@ -2,11 +2,11 @@
 
 ## 范围和证据边界
 
-- 核查日期：2026-10-19；本地基线 HEAD 为 2797a57b34477021b5c35605f472d8355ffe3b59，非浅克隆。当前 0.0.37 适配尚未提交。
+- 增量核查日期：2026-10-27；本地基线 HEAD 为 9efadd88b4fb1993a415d3302060b4168fd02d15，非浅克隆。0.0.39 适配尚未提交；以下旧清单保留其原核查范围。
 - 本地专项路径的 full-history 非合并提交共 50 条，另有 20b0b064 的合并独有版本/测试处理；下面逐条列出。普通路径 git log 曾漏掉 da7f978，不能再用简化历史作为完整性依据。
 - 核查包括插件、专项测试、升级脚本/配方、维护文档；另检查共享 README、provisioning、发布/契约路径。新增共享候选必须读 diff 判定，不把全部仓库提交都叫 Maker 兼容修改。
 - 行内短 hash 只用于矩阵交叉引用；下表给出完整 hash。实际实现/验收见 [兼容矩阵](compatibility.md)。版本、许可证、文案和测试提交也保留记录，不能把它们误算成新的 Runtime 补丁。
-- 0.0.31 分支不在当前本地 refs：四条提交通过 GitHub get_commit 取得实际补丁；a3d295d 未取得。不能宣称已穷尽被删除分支、不可访问 fork 和未公开历史。
+- 0.0.31 分支不在当前本地 refs：四条提交通过 GitHub get_commit 取得实际补丁；a3d295d 在 2026-10-27 已从本地对象取回并读到实际 diff。不能宣称已穷尽被删除分支、不可访问 fork 和未公开历史。
 - 整包升级的记录是官方版本及其兼容差异/契约检查，不表示逐行审计所有第三方依赖的全部源码。新增风险仍须按本次新旧发布包单独检查。
 
 ## 本地逐提交清单
@@ -77,7 +77,7 @@
 | 0a0568223449100d0c5086b698cf4f96f1d256d5 | normalizeMakerAuthGuidance 先匹配 PAT+TapTap auth 同时缺失，再匹配单独缺失；引导 maker_login 或设置页重存 PAT。 | 已在 891868e 的宿主层保留，T4；顺序错误会留下无效 CLI 指引。 |
 | e4e5f63c9fd89e7aef033b4e34682aa2b7790d6f | confirm_character_voice 单次尝试；重连时/待重放队列拒绝未发送请求，派发后断线返回 unknown；说明 ElevenLabs Voice Slot 副作用，禁止自动重放。 | 0.0.32 后使用通用不重放/三态契约；0.0.37 仍须检查 manager、直接调用、pending queue、MAC retry，不能只保护工具名列表。 |
 | aec91ddcaa0e0fd727ad64117a82acb977848343 | manager.acquire 和直接 client.connect 失败用 makerProxyToolNotExecuted 标记；派发后仍 unknown；直接 connect 失败关闭 client，测试两条初始化路径与派发后中断。 | 保留 V6/T3 的阶段区分，不机械复制旧符号；需要新包实际行为测试。 |
-| a3d295d（只有短 hash） | 维护文档记载“补远端 isError 三态”。本地对象不存在；官方仓 get_commit HTTP 422，liangdong-ttm 同名 fork HTTP 404。 | **证据缺口**：未读到原 diff，不能补造完整 hash/细节。需要原 PR、完整 hash 或可访问仓库；目前以 V1/V6/T3 覆盖对应行为，但不宣称历史已核验。 |
+| a3d295da1729939b77ca0827b2d94b40aa51ae9f | 远端 confirm_character_voice 的 isError 结果归为 unknown；宿主禁止身份恢复重发该工具，目录同步先核对再操作。2026-10-27 取回并核对实际补丁。 | 已由通用执行态和不重放契约承接，V1/V6/T2/T3；不是当前分支的发布记录。 |
 
 ## 共享文件与合并处理
 
@@ -86,9 +86,9 @@
 - 379831f9f614f97b366007d8003c1517c38619cb：重塑 README 与贡献/审查说明；Maker vendor 升级说明是入口，不替代配方和实际补丁。
 - 20b0b064 有实际 combined diff，已经单列。3c26b0b23e50175bfe60e4f11376cfcb478b7de7 合并 locale 两侧；47–49 均保留来源。其余本次范围合并主要继承父树，不重复算新补丁；下一次仍检查合并独有差异，不能永久排除 merge。
 
-## 0.0.37 工作树增量（尚无提交 hash）
+## 0.0.37 实现增量（原工作树记录）
 
-位置：.github/maker-runtime/0.0.37.json、专项测试、node/child-process-adapter.cjs；基线见本文开头。真正提交后再补 hash。
+位置：.github/maker-runtime/0.0.37.json、专项测试、node/child-process-adapter.cjs；原实现提交 435abb3f，最终经 cc23d4f9 合入。以下条目描述实现，不表示新版本已通过实机验收。
 
 1. V1 旧白名单之外修新 getRemoteProxyExecutionState 聚合器：executed 保留，unknown 优先，executed/not_executed 冲突为 unknown。
 2. V2–V5 继续保留黑名单结构化结果、按请求账号检查、列表受限原因、三处用户 Skill 根检查；V5 重定位打包符号，不能照抄旧行号。
@@ -97,6 +97,36 @@
 5. V8 仅 Cindy 隐藏模型设置按钮、禁自定义配置写 API、识图 Server-only，不可用明确 503，无 ChatGPT 回退；独立 Maker 行为保留。
 6. H2 facade 补 exitCode/signalCode 初始 null、exit/close 更新和启动失败 -1，匹配 HiddenStdioClientTransport 的 alive/kill 判断；测试实际提取的 transport + Host handle。
 7. 官方新 UI Editor/编码资源与依赖按来源检查、补许可证。以上不代表正式/Beta Cindy 实机验收已完成。
+
+## 2026-10-27 补核的历史增量
+
+本地脚本检查 69 个普通提交、29 个合并；combined diff 仍仅 20b0b064 有独有修改。
+下列新增候选已按实际 diff 核对，未把 stash 快照或被 squash 的提交当作新发布。
+
+| 完整 hash | 核对结果 / 验收 |
+| --- | --- |
+| 4c70f9858b6cc117242f8ac9b3435978423f2846 | PAT 与登录恢复提示适配插件入口，已由 891868e 承接；T4。 |
+| 8e3743f3b4c7a4db24fe339737bce2701e62ad42 | status 的 Python/LSP/升级建议改插件指引；T4。 |
+| 11178b2e9765b65b5338c74de8185ef97e93a895 | 状态建议归一化固定工具名，防绕过 maker_build；T4。 |
+| 5d5080bd0e5dbc440c4ce6dd89b49c5596e2c6bd | 静态目录只是快照，不能保证账号实际可调用；T4/V4。 |
+| 44c02fa26e9e20345d1e50076a38f9eed1d7a12b | stash 的未跟踪双语维护文档快照，无产品代码；不作为发布或新保护。 |
+| 435abb3fbd0abffa2ab03104ae44a5f306ffab2b | 0.0.37 八项配方、child facade 状态字段、本地 validate 入口及终态收集；V1–V8/H2/H6/L1。 |
+| c2d4e119fdf959f7fcbb86fc4ee51d2591c2b01d | validate stdout 单独增至 8 MiB，响应超过 64 KiB 返回摘要及原始证据；L1。 |
+| 00aa15e4adc645db6e72c7a37a5cd66a3f52ff87 | 派发前检查证据 Git 忽略与索引，拒绝模式冲突，清理结构化路径；L1。 |
+| 0ca5cd3f2f06a1be90da65dbc8a33f0a484e469d | 四语言声明验证前提、参数适用模式、Skill filter 修复副作用；L1/U2。 |
+| 9481d24b445c2425122d228ed5ff1cb0743bc5d6 | validate 的带值参数改 --flag=value，全部选项仍在 childSpawn 16 项内；L1/H1。 |
+| 757f486e3431cf29804043ece3fcf89b31c8d501 | 保留各轮证据与 attempt IDs，拒绝链接/注入，产物路径仅指向已验证证据；L1。 |
+| cc23d4f9100eb5a88b73457527c0066c5c14e51a | #187 squash 合入；与 757f486e 的 node/main.js/0.0.37 配方无差异，承接上述保护。 |
+| 0f88218715a4086b8032a20d1c9b7a4810b5ccb7 | 预览开关默认开，设置请求及正文均限 2 秒；失败仍保留成功构建和链接，不重建；U1/M3。 |
+| 64dbb6c7425fbbffcb6589ef9853fadbfd4dc891 | 云端脏工作区恢复提示要求先取得云端构建授权，再合并分叉，不能直接重试；T6/T3。0.0.39 的自动修复与此契约须一并决定。 |
+
+## 0.0.39 工作树适配
+
+- 从本机 npm 缓存离线取得正式 @taptap/maker@0.0.39，完整性与独立配方一致；本地源码的 dev bundle 不作发布物。
+- V1–V8 保留，V5 按新打包别名重定位；V8 保留 Cindy Server-only/503，上游已自行移除无服务时的 ChatGPT 回退，不再叠加旧回退替换。
+- main.js 原 60 秒请求窗口改为 120 秒；保留 30 秒短请求、既有进度续期和 15 分钟总时限。
+- T6 待确定：上游新增分叉自动合并和云端未提交改动自动入库，旧插件声明及回归测试要求分叉停止。未删旧断言、未宣称整套测试通过。
+- 官方包未新增依赖名称或 HTTP(S) 字面地址；新增云端 Git 路径使用既有 Maker API/PAT。嵌入 UI Editor 的 preview.js/layout.js 两文件变化与本地源码一致，其余编码资源对照未变化。
 
 ## 下次怎样避免漏项
 

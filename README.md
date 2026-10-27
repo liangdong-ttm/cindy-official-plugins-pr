@@ -423,7 +423,7 @@ test package; authors or maintainers supply runtime and compatibility evidence
 appropriate to the affected behavior before merge. Valid evidence for unaffected
 paths can be reused without reinstalling after every wording change.
 
-`taptap-maker/vendor/taptap-maker/` ships the official `@taptap/maker@0.0.37`
+`taptap-maker/vendor/taptap-maker/` ships the official `@taptap/maker@0.0.39`
 with the plugin. When upgrading, replace the published npm package content
 wholesale and bump the plugin version accordingly. Preserve these reviewed Cindy
 compatibility patches until the official package includes equivalent fixes:
@@ -454,6 +454,12 @@ do not add unrelated manual bundle edits.
 
 Historical failures, superseded fixes and upgrade checks are recorded in the
 [Maker maintenance checklist](./docs/taptap-maker-maintenance.md).
+
+Plugin 2.1.25 raises the request window for all dynamic Maker tools, tool discovery
+and long-running account operations from 60 to 120 seconds. Existing progress-based
+renewal and the 15-minute total ceiling remain unchanged; no periodic heartbeat is
+added. Requests without progress can still time out after 120 seconds, so this is
+not an unlimited wait or a guarantee that large generation requests will finish.
 
 Plugin 2.1.17 adds `maker_validate` for local Lua checks/screenshots through the
 trusted current workspace and bundled Runtime. Cindy's Manual supplies the workflow

@@ -4,6 +4,19 @@
 
 ## Read first
 
+### 2.1.25: Runtime 0.0.39 and request windows
+
+Use the official npm release from local cache with a dedicated 0.0.39 recipe,
+preserving V1–V8. Raise the former 60-second window to 120 seconds for all dynamic
+tools, tool discovery and long-running account operations. Short requests remain
+at 30 seconds; existing progress renewal and the 15-minute total ceiling remain
+unchanged, with no new periodic heartbeat. Calls without progress may still time
+out; this does not provide unlimited waiting.
+
+Upstream 0.0.39 automatically merges divergence and commits dirty cloud changes,
+unlike the existing build contract. That behavior is pending a decision, and the
+old divergence-stop regression still fails. The current package is not release-ready.
+
 ### 2.1.19: validation arguments and evidence boundaries
 
 Validation checks Git ignore rules and the index without changing either. Unignored evidence,
@@ -37,7 +50,7 @@ Pass each valued validation option as a single `--flag=value` argument. Even wit
 all options enabled, argv must fit Cindy childSpawn's 16-entry limit; otherwise
 the host discards the request and spawning times out.
 
-Current upgrade: plugin 2.1.22 / Runtime 0.0.37, with eight bundle patches
+Previous upgrade: plugin 2.1.22 / Runtime 0.0.37, with eight bundle patches
 listed in the repository README and updated child-process compatibility.
 The inventory and device results below describe the historical 0.0.33/0.0.34
 baseline, not device acceptance of 0.0.37.

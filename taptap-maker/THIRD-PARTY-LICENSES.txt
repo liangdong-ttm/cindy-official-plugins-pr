@@ -2032,7 +2032,7 @@ Third-Party Notices for the Cindy TapTap Maker plugin
 =====================================================
 
 This plugin ships a vendored copy of the official @taptap/maker npm package
-(version 0.0.37, MIT, https://github.com/taptap/instant-games-open-mcp). Its
+(version 0.0.39, MIT, https://github.com/taptap/instant-games-open-mcp). Its
 MIT license text is reproduced in vendor/taptap-maker/LICENSE, which covers
 TapTap's own code only.
 The bundle retains eight Cindy compatibility patches: preserve the remote
@@ -2045,6 +2045,8 @@ requests, and isolate Cindy console launcher identity by distribution and entry.
 The execution-state patch also covers the 0.0.37 state aggregator and conflicts.
 The eighth patch hides model settings and disallows custom API configuration
 in Cindy distribution, with Server-only recognition and no provider fallback.
+Runtime 0.0.39 also removes the upstream ChatGPT recognition fallback; no new
+bundled dependency names were added relative to 0.0.37.
 The paired repository READMEs
 document this complete patch list for future upgrades.
 

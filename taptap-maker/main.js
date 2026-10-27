@@ -84,7 +84,7 @@ async function accountRequest(action, payload, longRunning, preserveFailure) {
       name: ACCOUNT_TOOL,
       arguments: args,
     },
-    timeoutMs: longRunning ? 60000 : 30000,
+    timeoutMs: longRunning ? 120000 : 30000,
     ...(longRunning ? { maxTotalMs: 900000 } : {}),
   });
   var parsed = parseAccountResult(result);
@@ -156,7 +156,7 @@ async function listMakerTools(workdir) {
   var result = await nodeRequest({
     method: 'cindy/tools-list',
     params: { target_dir: workdir },
-    timeoutMs: 60000,
+    timeoutMs: 120000,
   });
   var access = isObject(result) && isObject(result._meta) ? result._meta.maker_access : null;
   if (isObject(access) && access.code === 'BLACKLISTED') {
@@ -233,7 +233,7 @@ async function callMakerTool(name, args, longRunning) {
       arguments: args,
       ...(progressToken ? { _meta: { progressToken: progressToken } } : {}),
     },
-    timeoutMs: longRunning ? 60000 : 30000,
+    timeoutMs: longRunning ? 120000 : 30000,
     ...(longRunning ? { maxTotalMs: 900000 } : {}),
   });
 }
