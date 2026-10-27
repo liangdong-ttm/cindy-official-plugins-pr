@@ -1470,10 +1470,10 @@ test('云端工作区错误保留执行态，使用插件构建入口且不再�
   assert.equal(build.result.isError, true);
   const text = build.result.content.map((item) => item.text).join('\n');
   assert.match(text, /cloud workspace has uncommitted changes/);
-  assert.match(text, /retry_tool: maker_build/);
+  assert.match(text, /retry_tool: `maker_build`/);
   assert.doesNotMatch(text, /maker_build_current_directory|confirm_remote_build_without_submit|sync 提交/);
   assert.equal(build.result.structuredContent.execution_state, 'executed');
-  assert.match(build.result.structuredContent.message, /retry_tool: maker_build/);
+  assert.match(build.result.structuredContent.message, /retry_tool: `maker_build`/);
   assert.match(text, /- status: failed_after_commit/);
 });
 
@@ -3289,4 +3289,89 @@ test('停止去文字后不再启动卡片内的识图请求', async () => {
   const current = { nodes: [node] };
   const ui = context.createUiRecognitionUiWithHost({ current: () => current, autoStopped: () => true });
   assert.equal(await ui.runImage('cut', async () => true, true, true), false);
+});
+
+
+test('云端提交成功后 merge 或 HEAD 异常保留已执行状态', async () => {
+  for (const failurePoint of ['merge', 'head']) {
+    let pushes = 0;
+    let cloudCommits = 0;
+    let headReads = 0;
+    const source = makerBundleFunction('pushMakerProject');
+    const context = createContext({
+      [source.match(/const requestedCwd = (path\d*)[.]resolve/)[1]]: { resolve: value => value },
+      ensureGitAvailable() {}, resolveUsableMakerGitWorkspace: cwd => ({ projectRoot: cwd }),
+      loadProjectConfig: () => ({ project_id: 'example-project' }),
+      ensureAuthenticatedOrigin: async () => {},
+      inspectMakerRemoteSyncStatus: async () => ({ status: 'ahead', branch: 'main' }),
+      readGit: async args => {
+        if (args[0] === 'rev-parse') {
+          if (++headReads > 1 && failurePoint === 'head') throw new Error('HEAD read failed');
+          return 'local-commit';
+        }
+        return '';
+      },
+      currentBranch: async () => 'main',
+      readUnpushedCommitState: async () => ({ hasUnpushedCommits: true }),
+      readAheadState: async () => undefined,
+      gitStepWithTransientRetry: async args => {
+        if (args[0] === 'push') { pushes++; throw new Error('cloud blocked'); }
+        return 0;
+      },
+      toMakerGitFailure: (error, stage) => ({ stage, classification: stage === 'push' ? 'cloud_workspace_blocked' : 'local', stderr: error.message }),
+      repairCloudWorkspace: async () => { cloudCommits++; return { status: 'repaired', cloudCommitSha: 'cloud-commit' }; },
+      mergeMakerRemote: async () => { if (failurePoint === 'merge') throw new Error('merge inspection failed'); },
+      formatProgressSummary: () => [], formatBuildLocalExecutionCheckLines: () => [], indent2: value => value,
+    });
+    const functions = ['pushMakerProject', 'getBlockingRemoteSyncFailure', 'formatBuildResult',
+      'formatBuildFailureStageLines', 'formatCloudRepairLines', 'formatPushRecoveryLines',
+      'pushRecoveryUserMessage', 'formatMakerFailureLines'];
+    new Script(functions.map(makerBundleFunction).join('\n')).runInContext(context);
+    const submitted = await context.pushMakerProject({ cwd: '/example-project' });
+    assert.equal(submitted.cloudRepair.status, 'repaired');
+    assert.equal(submitted.failure.stage, 'merge');
+    assert.equal(submitted.pushed, false);
+    assert.equal(pushes, 1);
+    assert.equal(cloudCommits, 1);
+    const formatted = context.formatBuildResult({ mode: 'submit_failed_before_build',
+      projectRoot: '/example-project', projectId: 'example-project', submitResult: submitted });
+    const harness = createMainHarness(buildFailureResponder(formatted));
+    const result = await harness.call('maker_build', { session_context: previewBuildSession });
+    assert.equal(result.result.structuredContent.execution_state, 'executed');
+    assert.equal(result.result.structuredContent.automatic_retry, false);
+    assert.match(result.result.structuredContent.message, /cloud-commit/);
+  }
+});
+
+test('tools/list 默认路由预算为 115 秒并早于宿主 120 秒结束', () => {
+  const scheduled = [];
+  const context = createContext({ module: { exports: {} }, require: requireFromTest,
+    setTimeout: (fn, ms) => { scheduled.push(ms); return { unref() {} }; }, clearTimeout() {},
+  });
+  new Script(readFileSync(new URL('node/mcp-root-router.cjs', pluginRoot), 'utf8')).runInContext(context);
+  const router = context.module.exports.createMcpRootRouter({ writeHost() {}, writeRuntime() {} });
+  router.handleHostLine(JSON.stringify({ jsonrpc: '2.0', id: 'list', method: 'cindy/tools-list',
+    params: { target_dir: '/tmp/trusted-maker' } }));
+  assert.deepEqual(scheduled, [115_000]);
+  assert.ok(scheduled[0] < 120_000);
+});
+
+test('新版 Git 指引统一转换到获授权的通用 Git 和 Maker 插件入口', async () => {
+  const tick = String.fromCharCode(96);
+  const messages = [
+    'Maker 远端有 2 个新提交，且本地工作区干净。运行 ' + tick + 'taptap-maker git sync' + tick + ' 拉取后再开始修改。',
+    '构建或提交时继续使用 maker_build_current_directory，或运行 ' + tick + 'taptap-maker git push' + tick + '。',
+    '请按 failure 信息处理，或运行 ' + tick + 'taptap-maker git cloud-status --target-dir <项目目录>' + tick + ' 查看云端改动后重试 maker_build_current_directory。',
+  ];
+  for (const message of messages) {
+    const harness = createMainHarness(async () => ({ ok: true, result: { content: [{ type: 'text', text: message }],
+      structuredContent: { success: true, next_action: message } } }));
+    const response = await harness.call('maker_status', { detail: true, session_context: previewBuildSession });
+    assert.doesNotMatch(JSON.stringify(response.result), /taptap-maker git|maker_build_current_directory/);
+    if (message.includes('git sync')) assert.match(response.result.content[0].text, /先取得用户授权/);
+    if (message.includes('cloud-status')) assert.match(response.result.content[0].text, /确认结果前不要重试/);
+    const failure = createMainHarness(buildFailureResponder(message));
+    const failed = await failure.call('maker_build', { session_context: previewBuildSession });
+    assert.doesNotMatch(JSON.stringify(failed.result), /taptap-maker git|maker_build_current_directory/);
+  }
 });

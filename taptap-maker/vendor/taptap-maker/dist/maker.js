@@ -32726,9 +32726,13 @@ ${failure.stderr || ""}`
     } catch (fetchError) {
       return failed(toMakerGitFailure(fetchError, "fetch"), cloudRepair);
     }
-    const mergeFailure = await mergeMakerRemote(cwd, branch, options3.onProgress);
-    if (mergeFailure) return failed(mergeFailure, cloudRepair);
-    commitHash = (await readGit(["rev-parse", "--short", "HEAD"], cwd)).trim();
+    try {
+      const mergeFailure = await mergeMakerRemote(cwd, branch, options3.onProgress);
+      if (mergeFailure) return failed(mergeFailure, cloudRepair);
+      commitHash = (await readGit(["rev-parse", "--short", "HEAD"], cwd)).trim();
+    } catch (mergeError) {
+      return failed(toMakerGitFailure(mergeError, "merge"), cloudRepair);
+    }
     try {
       transientRetries += await push();
     } catch (retryError) {
@@ -58757,7 +58761,7 @@ function formatCloudRepairLines(submitResult) {
   if (!repair) return [];
   return [
     `- cloud_workspace_repair: ${repair.status}`,
-    repair.status === "unknown" ? "- execution_state=unknown; automatic retry is disabled" : "",
+    repair.status === "unknown" ? "- execution_state=unknown; automatic retry is disabled" : repair.status === "repaired" ? "- execution_state=executed; automatic retry is disabled" : "",
     repair.cloudCommitSha ? `- cloud_commit_sha: ${repair.cloudCommitSha}` : "",
     repair.cloudChangedFiles !== void 0 ? `- cloud_changed_files: ${repair.cloudChangedFiles}` : "",
     repair.message ? `- cloud_repair_error: ${repair.message}` : "",

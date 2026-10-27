@@ -21,6 +21,10 @@ the native repository; see the PR for the actual runtime verification scope.
 V10 retains uncertain canvas requests and recognition pending IDs, pauses recovery
 at its wait limit, and extends the 015 stop control to preparation and recovery
 waits. Late replies after stopping must not start subsequent requests.
+The tools/list root router uses 115 seconds inside the 120-second host window.
+Post-cloud-commit merge/HEAD exceptions retain executed state. Git guidance uses
+authorized host Git sync, maker_build for submission, and the Maker project page
+for checking cloud state; it does not recommend unavailable standalone commands.
 
 ### 2.1.19: validation arguments and evidence boundaries
 

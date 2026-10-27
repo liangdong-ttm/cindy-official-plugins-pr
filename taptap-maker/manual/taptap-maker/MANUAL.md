@@ -4,6 +4,8 @@
 
 下面的 `maker_*` 都通过 `ghost_call({ ghost_id: "taptap-maker", tool: "<maker_* 工具名>", args: { ... } })` 调用；上下文没有工具清单时先调用 `ghost_info({ ghost_id: "taptap-maker" })`。Maker 账号、初始化、构建及素材工具操作不要通过 Shell、`npx`、外部 CLI、直接 MCP、通用浏览器或运行时内部工具绕行；插件会复用随包 Runtime、当前账号和宿主可信工作区。普通 Git 状态、差异和历史检查可继续使用 Cindy 或系统 Git。
 
+用户明确要求同步 Git 时，可通过 Cindy 通用 Git 或系统 Git 执行 fetch 并合并 origin/main；先检查本地改动，冲突时停止并保留现场。普通 Git 不替代 Maker 的账号、云端工作区提交或构建入口；提交、推送和构建仍使用 maker_build。云端工作区结果不明时，先通过 Maker 项目页面核对提交记录，不自动重试。
+
 ## 基本流程
 
 1. Maker 项目中的广告、激励视频、广告位或 `ShowRewardVideoAd` 请求先调用 `maker_ads_guide`，再按官方指南检查项目状态、调用 `get_ad_config`，并读取项目内 `engine-docs/recipes/sdk.md` 后修改广告代码。

@@ -140,3 +140,11 @@ repairCloudWorkspace 保留 outcomeUnknown；push/formatBuildResult/main.js 贯�
 - 实际 bundle 的 7 项新增回归覆盖请求状态组合、超限、查询失败、停止后的迟到结果、卡片内后续识图和安全重试。完整七套 149/149 通过，配方反向还原及完整性通过。此前 Git 7/7 证据复用，V10 未改 Git。
 - 旧测试 Console 已正常关闭，Forge 原位更新同一 root 实例成功；已安装插件重开服务并在 Cindy WebView 加载真实游戏画布，页面正常且实际下发脚本含 V10 两项保护。未运行付费生成；故障/停止路径证据仍为真实函数加模拟依赖，不冒称实机付费断网测试。
 - 本次最终包 SHA-256：61019b964c84f7a94c770b5f3bbd0fc9be8726555e1279ce60725047cba33ff4；maker.js：4e2d122d13db62a70893a450007b7af3d31e8bfc39854d589745af2959498735。全部 35 个 vendor 文件核验一致；前节哈希为 V9 安装时的历史记录。
+
+### Codex 补充复核闭环（2026-10-27）
+
+- V9 补齐云端提交成功之后 merge/HEAD 读取抛异常的路径，失败结果继续携带 cloudRepair，并最终输出 executed/automatic_retry:false，避免丢失已经发生的云端提交。
+- H5 内部 tools/list 默认预算由 55 秒改为 115 秒，保留早于外层 120 秒的回收余量；既有超时清队列、拒绝陈旧响应及重建逻辑保留。
+- T4 的新版 Git 指引在文本及结构化状态结果中统一转换：明确授权的普通 fetch/merge 使用 Cindy 通用 Git，提交/构建使用 maker_build；云端状态通过 Maker 项目页面核对，未知结果不自动重试。Manual 同步边界。
+- 新增三项回归，完整七套 152/152 通过；实际游戏副本重新验证最终 bundle，Git 7/7 通过。最终包再次原位更新成功，实际 maker_status 返回 0.0.39；关闭旧测试服务并确认端口退出后，新 Console health 返回新实例且非 draining。
+- 最终包 SHA-256：c27b4e74c6dc6c4292c55487fc2bf58ea2096e27cd5863a7457ee08fdaab5d72；maker.js：8ab28e3509b330acf4c476cfb9d2e9dfd4dc1d173a567a23775f2f6650f3a2e3。全部 35 个 vendor 文件与配方一致。上述历史哈希分别对应此前安装，最新交付以本节为准。

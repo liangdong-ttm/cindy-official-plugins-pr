@@ -3,7 +3,7 @@
   "version": "0.0.39",
   "integrity": "sha512-T91tiu63hKFeQBCk75Weaef1KHrtQLqVeWDvZF4C3q74+9fOV1t9wcrCE+5HuQNnlEUDeYTrYRxNzYa1Co+uNw==",
   "originalSha256": "49ab240e4e75a5dcf8833c1d2819651e7043e7ea6348d19cc959b15656fdde1a",
-  "patchedSha256": "4e2d122d13db62a70893a450007b7af3d31e8bfc39854d589745af2959498735",
+  "patchedSha256": "8ab28e3509b330acf4c476cfb9d2e9dfd4dc1d173a567a23775f2f6650f3a2e3",
   "patches": [
     {
       "id": "V1-executed-state",
@@ -165,7 +165,7 @@
         },
         {
           "before": "    `- cloud_workspace_repair: ${repair.status}`,",
-          "after": "    `- cloud_workspace_repair: ${repair.status}`,\n    repair.status === \"unknown\" ? \"- execution_state=unknown; automatic retry is disabled\" : \"\",",
+          "after": "    `- cloud_workspace_repair: ${repair.status}`,\n    repair.status === \"unknown\" ? \"- execution_state=unknown; automatic retry is disabled\" : repair.status === \"repaired\" ? \"- execution_state=executed; automatic retry is disabled\" : \"\",",
           "count": 1
         },
         {
@@ -186,6 +186,11 @@
         {
           "before": "result.submitResult.failure ? \"✗ Maker project submit blocked before commit/push; remote build was not started\" :",
           "after": "result.submitResult.failure ? \"✗ Maker project submit failed; remote build was not started\" :",
+          "count": 1
+        },
+        {
+          "before": "    const mergeFailure = await mergeMakerRemote(cwd, branch, options3.onProgress);\n    if (mergeFailure) return failed(mergeFailure, cloudRepair);\n    commitHash = (await readGit([\"rev-parse\", \"--short\", \"HEAD\"], cwd)).trim();",
+          "after": "    try {\n      const mergeFailure = await mergeMakerRemote(cwd, branch, options3.onProgress);\n      if (mergeFailure) return failed(mergeFailure, cloudRepair);\n      commitHash = (await readGit([\"rev-parse\", \"--short\", \"HEAD\"], cwd)).trim();\n    } catch (mergeError) {\n      return failed(toMakerGitFailure(mergeError, \"merge\"), cloudRepair);\n    }",
           "count": 1
         }
       ]
@@ -320,7 +325,7 @@
     "LICENSE": "3a6ed4d91c318ec454c98c8290bc02706d2f87fd922ef9944c1604cd0b718738",
     "README.md": "03e257a22915e7896ea5aaf4d5773e65908f886b23b4c709c6c5ced5b8df269d",
     "bin/taptap-maker": "d3cd496fb6cdf9606a809570de2920b7e40101939bc1cb6841f4ae7cda97c718",
-    "dist/maker.js": "4e2d122d13db62a70893a450007b7af3d31e8bfc39854d589745af2959498735",
+    "dist/maker.js": "8ab28e3509b330acf4c476cfb9d2e9dfd4dc1d173a567a23775f2f6650f3a2e3",
     "docs/MAKER_CONSOLE.md": "18fb13809150606bc7004f76e75ce26f8b2dacb33e9f4ee6c5dea69e67336c15",
     "docs/MAKER_LOCAL_PREVIEW.md": "f9023da4151f357227102a3a0e04e5b34fc93f69146f6e69f15b23134c871c75",
     "docs/MAKER_MCP_CONNECTION_TROUBLESHOOTING.md": "30905fd6a705a05f648e286972ac2bd4b946e6b6db763d8dd5160204ec4c1cba",

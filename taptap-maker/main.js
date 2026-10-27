@@ -380,10 +380,7 @@ function makerFailureDetails(message) {
 function makerBuildFailureResult(result) {
   var sanitized = sanitizeMakerFailure(result);
   if (!isObject(sanitized)) return sanitized;
-  var message = makerResultText(sanitized)
-    .replace(/\bmaker_build_current_directory\b/g, 'maker_build')
-    .replace(/请运行 `taptap-maker login` 重新完成 Maker 登录授权后重试。/g,
-      '请调用 maker_login 重新完成 Maker 登录授权后重试。');
+  var message = normalizeMakerPluginGuidance(makerResultText(sanitized));
   var details = Object.assign({}, sanitized.structuredContent);
   delete details.success;
   delete details.message;
@@ -541,6 +538,12 @@ function normalizeMakerPluginGuidance(value) {
         return '- 本地诊断环境未就绪；Cindy 插件暂不提供 Python 或 Lua LSP 自动安装入口，不影响远端构建。';
       }
       var normalized = line
+        .replace(/运行\s*\x60?taptap-maker git sync(?: --target-dir <项目目录>)?\x60?[^。；]*/g,
+          '如需同步，先取得用户授权后通过 Cindy 通用 Git 拉取并合并 origin/main；提交或构建使用 maker_build（会提交并推送）')
+        .replace(/或运行\s*\x60?taptap-maker git push\x60?/g,
+          '经用户明确要求提交或构建后调用 maker_build（会提交并推送）')
+        .replace(/(?:或)?运行\s*\x60?taptap-maker git cloud-status(?: --target-dir <项目目录>)?\x60?[^。；]*/g,
+          '通过 Maker 项目页面核对云端改动与提交记录，确认结果前不要重试提交或构建')
         .replace(/`?maker_status_lite`?/g, '`maker_status`')
         .replace(/`?maker_build_current_directory`?/g, '`maker_build`')
         .replace(/`?taptap-maker login`?/g, '`maker_login`')
@@ -556,6 +559,15 @@ function normalizeMakerPluginGuidance(value) {
     .trim();
 }
 
+function normalizeMakerGuidanceValue(value) {
+  if (typeof value === 'string') return normalizeMakerPluginGuidance(value);
+  if (Array.isArray(value)) return value.map(normalizeMakerGuidanceValue);
+  if (!isObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(function (entry) {
+    return [entry[0], normalizeMakerGuidanceValue(entry[1])];
+  }));
+}
+
 function sanitizeMakerStatus(result) {
   if (!isObject(result) || !Array.isArray(result.content)) return result;
   return Object.assign({}, result, {
@@ -566,7 +578,7 @@ function sanitizeMakerStatus(result) {
       });
     }),
     ...(result.structuredContent !== undefined
-      ? { structuredContent: redactLocalPathsInValue(result.structuredContent) }
+      ? { structuredContent: normalizeMakerGuidanceValue(redactLocalPathsInValue(result.structuredContent)) }
       : {}),
   });
 }
