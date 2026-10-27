@@ -455,7 +455,7 @@ do not add unrelated manual bundle edits.
 Historical failures, superseded fixes and upgrade checks are recorded in the
 [Maker maintenance checklist](./docs/taptap-maker-maintenance.md).
 
-Plugin 2.1.28 raises the request window for all dynamic Maker tools, tool discovery
+Plugin 2.1.25 raises the request window for all dynamic Maker tools, tool discovery
 and long-running account operations from 60 to 120 seconds. Existing progress-based
 renewal and the 15-minute total ceiling remain unchanged; no periodic heartbeat is
 added. Requests without progress can still time out after 120 seconds, so this is
