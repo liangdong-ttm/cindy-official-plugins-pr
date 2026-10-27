@@ -448,6 +448,10 @@ compatibility patches until the official package includes equivalent fixes:
 - In Cindy distribution, the console hides model settings, rejects custom API
   configuration and uses Server API recognition only; unavailable service reports an error without provider fallback.
 
+- Preserve unknown cloud Git commit outcomes when verification fails, suppress
+  blind retry guidance, recognize both cloud-blocking messages, and distinguish
+  completed cloud commits from unfinished local steps.
+
 Apart from these patches and the retained `LICENSE`, vendor files must match the
 official npm package. Recheck the patch list and regression tests on every upgrade;
 do not add unrelated manual bundle edits.

@@ -3,7 +3,7 @@
   "version": "0.0.39",
   "integrity": "sha512-T91tiu63hKFeQBCk75Weaef1KHrtQLqVeWDvZF4C3q74+9fOV1t9wcrCE+5HuQNnlEUDeYTrYRxNzYa1Co+uNw==",
   "originalSha256": "49ab240e4e75a5dcf8833c1d2819651e7043e7ea6348d19cc959b15656fdde1a",
-  "patchedSha256": "2ffb3adc5e7ce6d2baa980d8280ba8a91ec432383b91ea57cecce943e71c21f8",
+  "patchedSha256": "a2e78bc698e140ba744b00fa651076850d384a2ed40d7bde6a0bcdd92e733a8e",
   "patches": [
     {
       "id": "V1-executed-state",
@@ -144,13 +144,58 @@
           "count": 1
         }
       ]
+    },
+    {
+      "id": "V9-cloud-git-outcome",
+      "edits": [
+        {
+          "before": "      if (after == null ? void 0 : after.clean) return { status: \"repaired\", cloudCommitSha: after.head };",
+          "after": "      if (after == null ? void 0 : after.clean) return { status: \"repaired\", cloudCommitSha: after.head };\n      return {\n        status: \"unknown\",\n        message: \"云端提交结果不确定。请先核对 Maker 云端提交记录和工作区状态，确认结果前不要重试提交或构建。\"\n      };",
+          "count": 1
+        },
+        {
+          "before": "nextAction: cloudRepair.status === \"cloud_clean\" ?",
+          "after": "nextAction: cloudRepair.status === \"unknown\" ? cloudRepair.message : cloudRepair.status === \"cloud_clean\" ?",
+          "count": 1
+        },
+        {
+          "before": "    CLOUD_WORKSPACE_BLOCKED_PATTERN = /Working directory has (?:unstaged|staged) changes|Could not update working tree to new HEAD/i;",
+          "after": "    CLOUD_WORKSPACE_BLOCKED_PATTERN = /Working directory has (?:unstaged|staged) changes|Could not update working tree to new HEAD|cloud workspace has uncommitted changes that this push would overwrite/i;",
+          "count": 1
+        },
+        {
+          "before": "    `- cloud_workspace_repair: ${repair.status}`,",
+          "after": "    `- cloud_workspace_repair: ${repair.status}`,\n    repair.status === \"unknown\" ? \"- execution_state=unknown; automatic retry is disabled\" : \"\",",
+          "count": 1
+        },
+        {
+          "before": "    repair.status === \"repaired\" ? \"- note: 云端工作区的未提交改动已自动提交到远端 main，并已合并到本地。\" : \"\"",
+          "after": "    repair.status === \"repaired\" ? submitResult.pushed ? \"- note: 云端工作区的未提交改动已自动提交到远端 main，并已合并到本地。\" : \"- note: 云端工作区改动已提交；本地合并或推送尚未完成，请查看 failure.stage。\" : \"\"",
+          "count": 1
+        },
+        {
+          "before": "    \"- retry_tool: maker_build_current_directory\",",
+          "after": "    submitResult.cloudRepair?.status === \"unknown\" ? \"- next_action: 先核对云端提交记录和工作区状态，确认结果前不要重试。\" : \"- retry_tool: maker_build_current_directory\",",
+          "count": 1
+        },
+        {
+          "before": "    `- user_message: ${pushRecoveryUserMessage(submitResult.failure)}`",
+          "after": "    `- user_message: ${submitResult.cloudRepair?.status === \"unknown\" ? submitResult.cloudRepair.message : pushRecoveryUserMessage(submitResult.failure)}`",
+          "count": 1
+        },
+        {
+          "before": "result.submitResult.failure ? \"✗ Maker project submit blocked before commit/push; remote build was not started\" :",
+          "after": "result.submitResult.failure ? \"✗ Maker project submit failed; remote build was not started\" :",
+          "count": 1
+        }
+      ]
     }
   ],
   "vendorHashes": {
     "LICENSE": "3a6ed4d91c318ec454c98c8290bc02706d2f87fd922ef9944c1604cd0b718738",
     "README.md": "03e257a22915e7896ea5aaf4d5773e65908f886b23b4c709c6c5ced5b8df269d",
     "bin/taptap-maker": "d3cd496fb6cdf9606a809570de2920b7e40101939bc1cb6841f4ae7cda97c718",
-    "dist/maker.js": "2ffb3adc5e7ce6d2baa980d8280ba8a91ec432383b91ea57cecce943e71c21f8",
+    "dist/maker.js": "a2e78bc698e140ba744b00fa651076850d384a2ed40d7bde6a0bcdd92e733a8e",
     "docs/MAKER_CONSOLE.md": "18fb13809150606bc7004f76e75ce26f8b2dacb33e9f4ee6c5dea69e67336c15",
     "docs/MAKER_LOCAL_PREVIEW.md": "f9023da4151f357227102a3a0e04e5b34fc93f69146f6e69f15b23134c871c75",
     "docs/MAKER_MCP_CONNECTION_TROUBLESHOOTING.md": "30905fd6a705a05f648e286972ac2bd4b946e6b6db763d8dd5160204ec4c1cba",

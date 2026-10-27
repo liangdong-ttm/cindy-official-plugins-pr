@@ -30674,7 +30674,7 @@ var init_failure = __esm({
         this.failure = failure;
       }
     };
-    CLOUD_WORKSPACE_BLOCKED_PATTERN = /Working directory has (?:unstaged|staged) changes|Could not update working tree to new HEAD/i;
+    CLOUD_WORKSPACE_BLOCKED_PATTERN = /Working directory has (?:unstaged|staged) changes|Could not update working tree to new HEAD|cloud workspace has uncommitted changes that this push would overwrite/i;
   }
 });
 
@@ -32707,7 +32707,7 @@ ${failure.stderr || ""}`
       return failed(
         {
           ...failure,
-          nextAction: cloudRepair.status === "cloud_clean" ? "远端拒绝推送并提示云端工作区有未提交改动，但云端 Git 接口显示工作区是干净的。请稍后重试 maker_build_current_directory；仍然失败时，把 failure 信息反馈给用户。" : `远端拒绝推送：云端工作区有未提交改动，自动提交云端改动失败（${cloudRepair.message}）。`
+          nextAction: cloudRepair.status === "unknown" ? cloudRepair.message : cloudRepair.status === "cloud_clean" ? "远端拒绝推送并提示云端工作区有未提交改动，但云端 Git 接口显示工作区是干净的。请稍后重试 maker_build_current_directory；仍然失败时，把 failure 信息反馈给用户。" : `远端拒绝推送：云端工作区有未提交改动，自动提交云端改动失败（${cloudRepair.message}）。`
         },
         cloudRepair
       );
@@ -32841,6 +32841,10 @@ async function repairCloudWorkspace(appId, onProgress) {
     if (error2 instanceof CloudGitError && error2.outcomeUnknown) {
       const after = await getCloudGitStatus(appId).catch(() => void 0);
       if (after == null ? void 0 : after.clean) return { status: "repaired", cloudCommitSha: after.head };
+      return {
+        status: "unknown",
+        message: "云端提交结果不确定。请先核对 Maker 云端提交记录和工作区状态，确认结果前不要重试提交或构建。"
+      };
     }
     return { status: "failed", message: error2 instanceof Error ? error2.message : String(error2) };
   }
@@ -58573,7 +58577,7 @@ function formatBuildResult(result, progressSummary) {
   }
   if (result.mode === "submit_failed_before_build") {
     return [
-      result.submitResult.failure ? "✗ Maker project submit blocked before commit/push; remote build was not started" : result.submitResult.pushed ? "✓ Maker project submitted; remote build was not started" : result.submitResult.status === "clean" ? "Maker project has no changes to submit; remote build was not started" : "✗ Maker project submit failed; remote build was not started",
+      result.submitResult.failure ? "✗ Maker project submit failed; remote build was not started" : result.submitResult.pushed ? "✓ Maker project submitted; remote build was not started" : result.submitResult.status === "clean" ? "Maker project has no changes to submit; remote build was not started" : "✗ Maker project submit failed; remote build was not started",
       "",
       `- project_root: ${result.projectRoot}`,
       `- project_id: ${result.projectId}`,
@@ -58753,10 +58757,11 @@ function formatCloudRepairLines(submitResult) {
   if (!repair) return [];
   return [
     `- cloud_workspace_repair: ${repair.status}`,
+    repair.status === "unknown" ? "- execution_state=unknown; automatic retry is disabled" : "",
     repair.cloudCommitSha ? `- cloud_commit_sha: ${repair.cloudCommitSha}` : "",
     repair.cloudChangedFiles !== void 0 ? `- cloud_changed_files: ${repair.cloudChangedFiles}` : "",
     repair.message ? `- cloud_repair_error: ${repair.message}` : "",
-    repair.status === "repaired" ? "- note: 云端工作区的未提交改动已自动提交到远端 main，并已合并到本地。" : ""
+    repair.status === "repaired" ? submitResult.pushed ? "- note: 云端工作区的未提交改动已自动提交到远端 main，并已合并到本地。" : "- note: 云端工作区改动已提交；本地合并或推送尚未完成，请查看 failure.stage。" : ""
   ].filter(Boolean);
 }
 function formatPushRecoveryLines(submitResult) {
@@ -58768,9 +58773,9 @@ function formatPushRecoveryLines(submitResult) {
     "- committed_but_unpushed: yes",
     submitResult.commitHash ? `- local_commit: ${submitResult.commitHash}` : "",
     submitResult.ahead ? `- git_state: ${submitResult.ahead}` : "",
-    "- retry_tool: maker_build_current_directory",
+    submitResult.cloudRepair?.status === "unknown" ? "- next_action: 先核对云端提交记录和工作区状态，确认结果前不要重试。" : "- retry_tool: maker_build_current_directory",
     "- do_not_use_generic_git_push: yes",
-    `- user_message: ${pushRecoveryUserMessage(submitResult.failure)}`
+    `- user_message: ${submitResult.cloudRepair?.status === "unknown" ? submitResult.cloudRepair.message : pushRecoveryUserMessage(submitResult.failure)}`
   ].filter(Boolean);
 }
 function pushRecoveryUserMessage(failure) {

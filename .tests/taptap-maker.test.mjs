@@ -951,12 +951,12 @@ test('Runtime BLACKLISTED 列表短路和调用拦截均将未执行状态传给
   }
 });
 
-test('Runtime 仅在落后远端时快进，冲突或不安全状态在提交前停止', async () => {
+test('Runtime 落后时快进，覆盖冲突、非 main 或远端未知在提交前停止', async () => {
   const match = vendorMakerSource.match(/async function pushMakerProject\([^]*?\n\}/);
   assert.ok(match);
   const failureMatch = vendorMakerSource.match(/function getBlockingRemoteSyncFailure\([^]*?\n\}/);
   assert.ok(failureMatch);
-  for (const status of ['needs_pull', 'conflict', 'diverged', 'branch_not_allowed', 'remote_unavailable']) {
+  for (const status of ['needs_pull', 'conflict', 'branch_not_allowed', 'remote_unavailable']) {
     const calls = [];
     const context = createContext({
       [match[0].match(/const requestedCwd = (path\d*)\.resolve/)[1]]: { resolve: (value) => value },
@@ -1460,7 +1460,7 @@ function buildFailureResponder(resultText, structuredContent = { success: false 
   });
 }
 
-test('云端工作区脏改动拒绝时附插件内可执行恢复步骤并保留执行态', async () => {
+test('云端工作区错误保留执行态，使用插件构建入口且不再附加旧云端构建恢复', async () => {
   const harness = createMainHarness(buildFailureResponder(cloudDirtyBuildFailureText, {
     success: false,
     execution_state: 'executed',
@@ -1470,14 +1470,10 @@ test('云端工作区脏改动拒绝时附插件内可执行恢复步骤并保�
   assert.equal(build.result.isError, true);
   const text = build.result.content.map((item) => item.text).join('\n');
   assert.match(text, /cloud workspace has uncommitted changes/);
-  assert.match(text, /征得同意后调用 maker_build 并传 confirm_remote_build_without_submit=true/);
-  assert.match(text, /git fetch origin/);
-  assert.match(text, /origin\/main merge（或 rebase）进本地 main/);
-  assert.match(text, /保留本地未推送提交/);
-  assert.match(text, /pull\/rebase 解决不了/);
+  assert.match(text, /retry_tool: maker_build/);
+  assert.doesNotMatch(text, /maker_build_current_directory|confirm_remote_build_without_submit|sync 提交/);
   assert.equal(build.result.structuredContent.execution_state, 'executed');
-  assert.match(build.result.structuredContent.message, /confirm_remote_build_without_submit=true/);
-  // 恢复指引只追加，不改写 Runtime 的失败详情。
+  assert.match(build.result.structuredContent.message, /retry_tool: maker_build/);
   assert.match(text, /- status: failed_after_commit/);
 });
 
@@ -3027,4 +3023,120 @@ test('deferred child 会保留宿主答复前写入 stdin 的 PAT 字节', async
   await once(child, 'spawn');
   await ended;
   assert.equal(Buffer.concat(received).toString('utf8'), 'pat-secret\n');
+});
+
+function makerBundleFunction(name) {
+  const start = vendorMakerSource.search(new RegExp('(?:async )?function ' + name + '[(]'));
+  assert.ok(start >= 0, name);
+  const end = vendorMakerSource.indexOf(String.fromCharCode(10) + '}', start) + 2;
+  return vendorMakerSource.slice(start, end);
+}
+
+test('Runtime 分叉先提交再合并，合并冲突保留提交且不推送', async () => {
+  for (const conflict of [false, true]) {
+    const calls = [];
+    const pushSource = makerBundleFunction('pushMakerProject');
+    const context = createContext({
+      [pushSource.match(/const requestedCwd = (path\d*)[.]resolve/)[1]]: { resolve: value => value },
+      ensureGitAvailable() {},
+      resolveUsableMakerGitWorkspace: cwd => ({ projectRoot: cwd }),
+      loadProjectConfig: () => ({ project_id: 'example-project' }),
+      ensureAuthenticatedOrigin: async () => {},
+      inspectMakerRemoteSyncStatus: async () => ({ status: 'diverged', branch: 'main' }),
+      readGit: async args => args[0] === 'status' ? ' M scripts/main.lua'
+        : args[0] === 'diff' ? 'scripts/main.lua' : 'example-commit',
+      currentBranch: async () => 'main',
+      readUnpushedCommitState: async () => ({ hasUnpushedCommits: true }),
+      gitOperationInProgress: async () => false,
+      createGitRunner: () => {},
+      generateCommitMessage: () => 'test: update project',
+      MAKER_COMMIT_IDENTITY_ARGS: [],
+      gitStep: async args => { calls.push(args[0]); },
+      mergeMakerRemote: async () => {
+        calls.push('merge');
+        return conflict ? { stage: 'merge', classification: 'merge_conflict', conflictFiles: ['scripts/main.lua'] } : undefined;
+      },
+      gitStepWithTransientRetry: async args => { calls.push(args[0]); return 0; },
+      readAheadState: async () => 'ahead',
+    });
+    new Script(pushSource + '\n' + makerBundleFunction('getBlockingRemoteSyncFailure')).runInContext(context);
+    const result = await context.pushMakerProject({ cwd: '/example-project' });
+    assert.equal(result.committed, true);
+    assert.equal(result.pushed, !conflict);
+    assert.deepEqual(calls, conflict ? ['add', 'commit', 'merge'] : ['add', 'commit', 'merge', 'push']);
+    if (conflict) {
+      assert.equal(result.status, 'failed_after_commit');
+      assert.equal(result.failure.classification, 'merge_conflict');
+    }
+  }
+});
+
+test('云端修复提交未知态贯通 Runtime 和插件，复查失败不重放或提示重试', async () => {
+  class CloudGitError extends Error {
+    constructor(unknown) { super('cloud request failed'); this.outcomeUnknown = unknown; }
+  }
+  for (const scenario of ['read-failed', 'clean', 'success', 'forbidden', 'timeout-read-failed', 'timeout-dirty', 'timeout-clean']) {
+    let reads = 0;
+    let commits = 0;
+    const context = createContext({
+      Error, CloudGitError, CLOUD_REPAIR_COMMIT_MESSAGE: 'test cloud repair',
+      getCloudGitStatus: async () => {
+        reads++;
+        if (scenario === 'read-failed' || reads > 1 && scenario === 'timeout-read-failed') throw new Error('lookup unavailable');
+        return { clean: scenario === 'clean' || reads > 1 && scenario === 'timeout-clean', head: reads > 1 ? 'after' : 'before' };
+      },
+      commitCloudGit: async (_id, input) => {
+        commits++;
+        assert.equal(input.all, true);
+        assert.equal(input.expectedHead, 'before');
+        if (scenario === 'success') return { commitSha: 'after', changedFiles: 1 };
+        throw new CloudGitError(scenario !== 'forbidden');
+      },
+      formatProgressSummary: () => [],
+      formatBuildLocalExecutionCheckLines: () => [],
+      indent2: value => value,
+    });
+    const functions = ['repairCloudWorkspace', 'formatBuildResult', 'formatBuildFailureStageLines',
+      'formatCloudRepairLines', 'formatPushRecoveryLines', 'pushRecoveryUserMessage', 'formatMakerFailureLines'];
+    new Script(functions.map(makerBundleFunction).join('\n')).runInContext(context);
+    const repair = await context.repairCloudWorkspace('example-project');
+    const unknown = scenario === 'timeout-read-failed' || scenario === 'timeout-dirty';
+    const expected = unknown ? 'unknown' : ['success', 'timeout-clean'].includes(scenario) ? 'repaired'
+      : scenario === 'clean' ? 'cloud_clean' : 'failed';
+    assert.equal(repair.status, expected, scenario);
+    assert.equal(commits, ['read-failed', 'clean'].includes(scenario) ? 0 : 1, scenario);
+    assert.equal(reads, scenario.startsWith('timeout-') ? 2 : 1, scenario);
+    const formatted = context.formatBuildResult({
+      mode: 'submit_failed_before_build', projectRoot: '/example-project', projectId: 'example-project',
+      submitResult: { status: 'failed_after_commit', branch: 'main', committed: true, pushed: false,
+        cloudRepair: repair, failure: { stage: 'push', classification: 'cloud_workspace_blocked',
+          retryable: false, nextAction: repair.message || 'Check the cloud workspace' } },
+    });
+    assert.doesNotMatch(formatted, /blocked before commit/);
+    const harness = createMainHarness(buildFailureResponder(formatted));
+    const built = await harness.call('maker_build', { session_context: previewBuildSession });
+    const result = built.result;
+    if (unknown) {
+      assert.equal(result.structuredContent.execution_state, 'unknown');
+      assert.equal(result.structuredContent.automatic_retry, false);
+      assert.match(result.structuredContent.message, /先核对/);
+      assert.doesNotMatch(result.structuredContent.message, /retry_tool|再重试|稍后重试/);
+    } else {
+      assert.notEqual(result.structuredContent.execution_state, 'unknown');
+    }
+    if (repair.status === 'repaired') assert.doesNotMatch(formatted, /并已合并到本地/);
+  }
+});
+
+test('新旧云端工作区阻塞消息均进入同一 Runtime 恢复流程', () => {
+  const pattern = vendorMakerSource.match(/CLOUD_WORKSPACE_BLOCKED_PATTERN = ([^\n]+);/)[1];
+  const context = createContext({ getMakerGitRetryDecision: () => ({ retry: false }) });
+  new Script('var CLOUD_WORKSPACE_BLOCKED_PATTERN = ' + pattern + ';\n'
+    + makerBundleFunction('isCloudWorkspaceBlockedMessage') + '\n'
+    + makerBundleFunction('classifyGitFailure')).runInContext(context);
+  for (const message of ['Working directory has unstaged changes', 'Working directory has staged changes',
+    'Could not update working tree to new HEAD', 'cloud workspace has uncommitted changes that this push would overwrite']) {
+    assert.equal(context.classifyGitFailure(message), 'cloud_workspace_blocked');
+  }
+  assert.equal(context.classifyGitFailure('non-fast-forward'), 'remote_rejected');
 });

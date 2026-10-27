@@ -21,6 +21,10 @@
 | V7 / c58a81a；0.0.37 增量 | Console 实例身份包含版本、分发来源、入口路径。 | 同版本 standalone、同版本另一插件目录不能被当当前 Cindy 服务复用；正确同入口仍可复用。检查身份生成与 health 验证两端，不只改文件名。测试“不会复用同版本”；F/N，跨会话并发和停服所有权需 D。 |
 | V8 / 0.0.37 用户确认的最小策略 | cindy_plugin 下 getConsoleHtml 无模型设置入口、readModelSettings 返回空配置；configured/resolvedUiVisionModels 固定 Server；写 models/ui-vision API 拒绝。 | 页面加载没有残留按钮空引用；GET 不露自定义密钥，非 GET 不写配置，Server 不可用明确 503；不降级 chatgpt-web，standalone 分支原行为不变。测试“识图固定 Server”，加隔离 HOME 真实 HTTP 冒烟。没有旧配置迁移、生成桥接或素材开关跨进程接管。 |
 
+### V9：0.0.39 云端 Git 修复
+
+repairCloudWorkspace 保留 outcomeUnknown；push/formatBuildResult/main.js 贯通 unknown，删除未知结果的 retry_tool，并兼容新旧云端阻塞消息。升级时验证：超时后复查失败或仍脏只提交一次，最终 unknown/automatic_retry:false，先核对再操作；复查干净保留上游 repaired；成功云端提交但本地合并失败不谎报合并成功。当前为 F + 宿主模拟，不宣称生产云端故障实测。
+
 ## Host / 进程层
 
 | ID / 来源 | 最终保护与定位 | 每次升级的具体检查与验收 |
@@ -69,7 +73,7 @@
 
 ## 0.0.37 前序验证记录（2026-10-19，插件 2.1.16 历史快照）
 
-当前 PR 包版本为 2.1.20，包含本地验证、大报告摘要、证据 Git 忽略检查和结构化路径清理。
+当前 PR 包版本为 2.1.22，包含本地验证、大报告摘要、证据 Git 忽略检查和结构化路径清理。
 以下测试与实机缺口属于前序记录，不代表当前包已完成实机验收。
 
 - 当时工作树插件 2.1.16 / Runtime 0.0.37；八项 recipe 补丁加 H2 facade 修改。官方 npm tarball 与 recipe integrity 对应，源 tag maker-v0.0.37/b3570c1 仅辅助核对；本地源码 package.json 的 dev 版本不是发布证据。
@@ -86,5 +90,44 @@
 | L1 / 435abb3、c2d4e11、00aa15e、9481d24、757f486 | local-validation.cjs 保留参数、证据忽略、路径隔离、所有轮次归档和大报告；13 项专项测试通过。Runtime preview validate 主实现未变化。 | 保留，F/本地 Git；未做新包真实游戏截图 D。 |
 | U1/M3 / 0f88218 | 预览开关、设置超时、失败保留构建链接和不重复构建；现有专项回归保留。 | 保留，宿主模拟；未做新包右侧预览 D。 |
 | V1–V8/H1–H6/A1–A4/M1–M3 | 新配方完整性检查通过；系统 Node 控制台由插件适配器启动，health/页面/Server-only/拒绝配置写入/关闭通过。 | 原兼容保护保留；N 不替代 D。 |
-| T6 / 577da80、64dbb6c | 新官方包允许分叉自动合并及云端自动提交，与旧分叉停止测试及云端恢复指引冲突。 | 待用户确定行为；保留失败断言，不能宣称可发布。 |
+| T6 / 577da80、64dbb6c | 新官方包允许分叉自动合并及云端自动提交，与旧分叉停止测试及云端恢复指引冲突。 | 用户已确认以 0.0.39 功能为准；已同步原分叉停止断言及旧指引；G1 已由 V9 修复，见最终验证。 |
 | H6/工具超时 / 本次 main.js | 所有动态工具窗口 120 秒、独立进度 token、maxTotalMs 900000；短请求仍 30 秒。 | 参数回归不等于真实长生图验收；无进度仍可能 120 秒超时。 |
+
+### 0.0.39 修复前复核（2026-10-27，HEAD f501a1c）
+
+以下保留修复前事实；当前结论见文末“最终适配与安装验证”，不再作为未解决事项。
+
+| ID / 来源 | 本轮证据 | 结论与必要适配 |
+| --- | --- | --- |
+| T6/T4 / 577da80、64dbb6c；f4ccda7 | pushMakerProject 在 diverged 时允许本地 commit 后 merge；云端阻塞时调用 repairCloudWorkspace 自动提交 all:true。ghost.json、Manual 仍承诺分叉停止；main.js 的旧云端恢复步骤仍要求额外云端构建。重跑原 T6 测试仍失败。 | 确认行为不一致。用户已确认接入新版自动合并/云端提交；同步宿主恢复指引、四语言声明和测试，保留原生 Git 行为；不能只删失败断言。 |
+| G1（V1/V6/T3 新路径）/ 0.0.39 git/cloud.ts、git/push.ts | 提取当前 bundle 的 repairCloudWorkspace，模拟提交请求 outcomeUnknown=true、复查也失败；实际只 POST 一次、GET 两次，结果却为 failed 且丢失未知态。再经真实 formatBuildResult 和 main.js makerBuildFailureResult，最终无 execution_state，仍含 retry_tool。 | 确认缺口源于 Runtime 新 Git 自动修复流程，现有插件执行态适配未覆盖；如保留该流程，需保留 unknown 并先核对云端结果。本探针为 F，无真实云端提交，也没有证据表明当前代码已自动重复 POST。 |
+| M1/M2/T4 / 3e0dffb、a12cdc5、bdc6bdd | 新旧官方 remoteProxyToolSnapshot 整体深比较相等，包括工具顺序、名称、描述和 schema；宿主分类未变。 | 当前快照无需新增生图/音频/视频开关映射；线上账号动态目录仍以实际返回为准。 |
+| H1 / 41d53ce；新版 git/exec.ts | 新 runner 使用 Git 可执行文件及参数数组，无 shell；从实际 bundle 提取 runGit，真实执行只读 git --version 成功。 | 未见需要改 Cindy Node adapter 的证据；该检查不替代 Windows Git 或真实提交。 |
+| 新画布素材路径 / 0.0.39 localMediaValidation.ts | 从真实 bundle 提取路径检查函数，旧 assets/image/canvas-UUID.png、新 .maker/canvases/images/canvas-UUID.png 均接受，../outside.png 拒绝。 | 旧画布图片路径兼容仍在，无需为目录变化新增 Cindy 迁移层；模板导入、识图及页面交互尚未完成 D。 |
+| P3 / f4ccda7 | 新配方完整性和既有回归结果复用：139 项中 138 通过、T6 一项失败；本轮对 T6 再次定向复现，另完成上述函数探针。 | 不能宣布全部兼容通过。新包未完成 Cindy 安装实测；现有 Node 控制台冒烟不能替代 D。 |
+
+以上为当时仅更新清单的复核记录，后续产品修复见文末。
+
+### 修复前真实游戏 Git 验证与功能基线确认（2026-10-27）
+
+- 用户确认以 0.0.39 功能为准，优先复用通用 Git，不增加 Cindy 专用 Git 实现。
+- 使用本机已绑定生产 Maker 的真实游戏，克隆其完整 Git 历史与内容到隔离目录；复制被忽略的绑定配置及其 .gitignore。原项目 HEAD、工作区状态及 Git 配置前后相同。
+- 7 项实际 Git 集成通过：快进；分叉合并并向本地 bare 仓库推送；冲突自动取消且保留本地提交/内容；快进拒绝覆盖未提交文件；Cindy 保存点与 Maker 推送共存；非 main 停止；已有 index.lock 停止且不移除锁。
+- 保存点测试直接运行本机 Cindy 源码 createShadowSavepoint 及其 Git 执行实现，仅替换日志输出。确认 HEAD 和用户索引不变，refs/cindy/savepoints/* 保留，Maker 推送不携带保存点。该结果是源码/Node 集成证据，不代表当前已安装 Cindy 的 Electron 生命周期或所有并发时序。
+- Maker 测试加载随包完整 0.0.39 bundle 的实际 Git 函数；只在测试副本移除 CLI 自动启动、导出函数，并把 origin 鉴权设置替换为仅允许本地测试 remote 的检查。Git 提交/合并/取消/推送均实际执行；不把这项替换说成生产鉴权或云端写入验证。
+- 原插件 node/maker-mcp.cjs 真实 Node 入口完成 initialize、游戏目录 tools/list、maker_status_lite；版本 0.0.39、项目 bound、Git ready。该游戏同时有 missing_taptap_identity/project_health warning，不据此声称游戏构建通过。
+- 原插件 node/maker-child.cjs git cloud-status 对真实 Maker 项目只读调用成功，云端工作区 clean。没有为构造测试故障写入生产云端。
+- 新云端错误文本识别为 cloud_workspace_blocked；历史文本 cloud workspace has uncommitted changes that this push would overwrite 单独输入识别为 unknown。保留这项服务端版本兼容差异，不无证据宣称生产当前仍返回旧文本。
+- G1 的云端提交未知态丢失仍可通过故障注入复现，属于 Runtime 通用错误处理问题，不是 Cindy 保存点冲突；本轮未增加 Git 特例修复。
+- 实时插件目录中 TapTap Maker 未安装，安装态 D 未执行；云端自动提交、生产推送/构建仍无本轮实测证据。之前全套 138/139 是旧契约测试结果，不能用本轮 7 项通过替代整套回归。
+
+### 最终适配与安装验证（2026-10-27，插件 2.1.25 / Runtime 0.0.39）
+
+- T6/T4 已完成：保留上游自动合并和云端自动提交，更新四语言声明、Manual 和测试；删除旧的额外云端构建恢复步骤，插件仅归一化工具名及登录入口。
+- G1 已由配方 V9-cloud-git-outcome 修复：未知提交结果经 Runtime 格式化和插件最终 structuredContent 保留 execution_state=unknown / automatic_retry=false；不再提供 retry_tool。故障注入覆盖复查失败、仍脏、已干净、明确拒绝等路径；每次最多一次提交。历史云端阻塞文本也已纳入同一分类。
+- 七套完整测试 142/142 通过；配方反向还原、35 个 vendor 文件完整性及 diff 空白检查通过。最终 bundle 重新运行真实游戏副本 Git 集成，7/7 通过，测试隔离边界同上。
+- Forge 返回 installed，root 实例 _root__taptap-maker，插件 2.1.25；实际运行宿主为 macOS Cindy 0.1.118（com.xd.cindycn，未独立确认正式/Beta 渠道）。本次安装成功取代前次安装取消记录，不能倒推前次已安装。
+- 已安装插件 maker_status、maker_list_tools、maker_console 成功，版本 0.0.39；当前 Agent 工作区为插件仓库，status 的未绑定是预期。控制台 health 200，Server-only 配置返回正常，模型设置入口隐藏。
+- Cindy 右侧 WebView 实际选择本机真实游戏并打开 Git 页面：显示 main、实际 HEAD 及提交历史，标注浅克隆历史不完整。只读浏览，未点击拉取、提交或构建。
+- 安装包 SHA-256：5a2be4d9eb0ad4140b8ba3ae181b2f18dc2c2586799d188cfd49a756c130bfbf；包内 maker.js SHA-256：a2e78bc698e140ba744b00fa651076850d384a2ed40d7bde6a0bcdd92e733a8e，全部 vendor 文件与配方一致。
+- 本轮仍未做生产云端提交/构建、付费媒体生成、游戏预览截图或 Windows 新包安装；保存点共存为真实 Cindy 源码/Node 集成，不扩大为已安装 Electron 保存点生命周期验证。上述未覆盖场景不以测试全绿替代。

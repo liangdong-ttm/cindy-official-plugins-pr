@@ -377,26 +377,13 @@ function makerFailureDetails(message) {
   return details;
 }
 
-// 远端 pre-receive 以「云端工作区有未提交改动」拒绝推送（如 get_ad_config 写入的
-// .project/settings.json）。Runtime 的 next_action 会误导为 pull/rebase，但插件外没有
-// 提交云端工作区的入口；这里换成已验证可行的插件内恢复步骤（makecindy/cindy#7001）。
-var MAKER_CLOUD_DIRTY_REJECTION = /cloud workspace has uncommitted changes that this push would overwrite/i;
-var MAKER_CLOUD_DIRTY_RECOVERY = [
-  '推送被拒的原因是云端工作区存在未提交改动（常见来源是 get_ad_config 把广告配置写入 .project/settings.json），不是远端有新提交；pull/rebase 解决不了，本地提交已保留。插件内已验证的恢复步骤：',
-  '1. 先向用户说明：下一步只构建云端现有版本、不包含本地改动，目的是让云端把未提交改动生成 sync 提交；征得同意后调用 maker_build 并传 confirm_remote_build_without_submit=true。云端构建完成后会自动生成 sync 提交，把 .project/settings.json 等未提交改动入库。',
-  '2. 让本地 AI 执行 git fetch origin，再把 origin/main merge（或 rebase）进本地 main，保留本地未推送提交；不要用无参数 git pull，也不要手动执行通用 git push。',
-  '3. 重新正常调用 maker_build（不传该参数）：此时本地 main 仅领先远端，会推送本地提交并完成构建。',
-  '不要手动复制或猜测云端配置。',
-].join('\n');
-
-function makerResultMentionsCloudDirtyRejection(result) {
-  return MAKER_CLOUD_DIRTY_REJECTION.test(makerResultText(result));
-}
-
 function makerBuildFailureResult(result) {
   var sanitized = sanitizeMakerFailure(result);
-  if (!isObject(sanitized) || !makerResultMentionsCloudDirtyRejection(result)) return sanitized;
-  var message = makerResultText(sanitized) + '\n\n' + MAKER_CLOUD_DIRTY_RECOVERY;
+  if (!isObject(sanitized)) return sanitized;
+  var message = makerResultText(sanitized)
+    .replace(/\bmaker_build_current_directory\b/g, 'maker_build')
+    .replace(/请运行 `taptap-maker login` 重新完成 Maker 登录授权后重试。/g,
+      '请调用 maker_login 重新完成 Maker 登录授权后重试。');
   var details = Object.assign({}, sanitized.structuredContent);
   delete details.success;
   delete details.message;

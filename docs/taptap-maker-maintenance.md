@@ -13,9 +13,11 @@ at 30 seconds; existing progress renewal and the 15-minute total ceiling remain
 unchanged, with no new periodic heartbeat. Calls without progress may still time
 out; this does not provide unlimited waiting.
 
-Upstream 0.0.39 automatically merges divergence and commits dirty cloud changes,
-unlike the existing build contract. That behavior is pending a decision, and the
-old divergence-stop regression still fails. The current package is not release-ready.
+Follow 0.0.39 automatic divergence merging and cloud-workspace commits, with
+matching guidance and regressions. V9 preserves unknown cloud-commit outcomes and
+recovery guidance and recognizes both cloud-blocking messages. It adds no Git
+implementation or retry layer. Ordinary Git and Cindy savepoints continue sharing
+the native repository; see the PR for the actual runtime verification scope.
 
 ### 2.1.19: validation arguments and evidence boundaries
 
